@@ -74,12 +74,12 @@ Sync your Obsidian vault to:
 ~/SecondSecondBrain/ops/brain-stack/vault
 ```
 
-Use Syncthing to pair your laptop vault folder with the server folder `/vault` in the Syncthing container. Once the files exist on the server, launch a coding agent inside the vault:
+Use Syncthing to pair your laptop vault folder with the server folder `/vault` in the Syncthing container. Once the files exist on the server, open the web terminal or launch an agent inside the vault:
 
 ```bash
 cd ~/SecondSecondBrain/ops/brain-stack
 ./scripts/configure-syncthing.sh
-./scripts/open-agent.sh
+./scripts/start-web-terminal.sh
 ```
 
 To pair from the terminal, get the laptop Syncthing device ID and rerun:
@@ -88,10 +88,13 @@ To pair from the terminal, get the laptop Syncthing device ID and rerun:
 ./scripts/configure-syncthing.sh LAPTOP_DEVICE_ID
 ```
 
-If the server uses a specific agent CLI:
+The web terminal starts directly in `vault/`. Run whichever agent CLI you want there:
 
 ```bash
-AGENT_COMMAND='codex' ./scripts/open-agent.sh
+codex
+claude
+aider
+nvim .
 ```
 
 The agent will read `vault/AGENTS.md` for note-writing rules.

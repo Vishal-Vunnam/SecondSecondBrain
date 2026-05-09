@@ -1,4 +1,11 @@
 .DS_Store
+node_modules/
+dist/
+*.tsbuildinfo
+apps/console/node_modules/
+apps/console/dist/
+apps/console/vite.config.js
+apps/console/vite.config.d.ts
 ops/brain-stack/.env
 ops/brain-stack/.anythingllm.env
 ops/brain-stack/data/

@@ -2,14 +2,16 @@ name: second-brain
 
 services:
   brain-console:
-    image: nginx:1.27-alpine
+    image: second-brain-console:local
+    build:
+      context: ../..
+      dockerfile: ops/brain-stack/Dockerfile.console
     container_name: brain-console
     restart: unless-stopped
     ports:
       - "${TAILSCALE_IP:-127.0.0.1}:${BRAIN_CONSOLE_PORT:-8080}:80"
-    volumes:
-      - ./brain-console:/usr/share/nginx/html:ro
-      - ./config/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       - couchdb
       - syncthing
