@@ -37,6 +37,7 @@ check() {
 }
 
 check "console" "http://${TAILSCALE_IP}:${BRAIN_CONSOLE_PORT}/health/console"
+check "syncthing" "http://${TAILSCALE_IP}:${SYNCTHING_PORT:-8384}/"
 if [[ -n "${COUCHDB_USER:-}" && -n "${COUCHDB_PASSWORD:-}" ]]; then
   if curl -fsS --max-time 5 -u "${COUCHDB_USER}:${COUCHDB_PASSWORD}" "http://${TAILSCALE_IP}:${COUCHDB_PORT}/_up" >/dev/null; then
     printf '%-14s ok  %s\n' "couchdb" "http://${TAILSCALE_IP}:${COUCHDB_PORT}/_up"

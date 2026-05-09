@@ -1,6 +1,7 @@
 const services = [
   { key: "console", endpoint: "/health/console" },
   { key: "couchdb", endpoint: "/health/couchdb" },
+  { key: "syncthing", endpoint: "/health/syncthing" },
   { key: "anythingllm", endpoint: "/health/anythingllm" },
   { key: "ollama", endpoint: "/health/ollama" },
 ];

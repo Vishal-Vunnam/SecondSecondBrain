@@ -1,13 +1,14 @@
 # Second Brain Stack
 
-Private Obsidian + CouchDB + Ollama + AnythingLLM stack for a self-hosted Second Brain.
+Private Obsidian + direct filesystem agent stack for a self-hosted Second Brain.
 
 ## What This Deploys
 
 - `brain-console`: a private web console on port `8080`.
+- `syncthing`: file-level vault sync on port `8384`.
 - `couchdb`: Obsidian Self-hosted LiveSync backend on port `5984`.
 - `ollama`: local model runtime inside Docker.
-- `anythingllm`: agent/RAG UI on port `3001`.
+- `anythingllm`: optional agent UI on port `3001`.
 
 All published ports bind to `TAILSCALE_IP` from `.env`, so the services are intended to be reached over your Tailnet rather than the public internet.
 
@@ -44,6 +45,7 @@ df -h /
 cd ops/brain-stack
 docker compose up -d
 ./scripts/init-couchdb.sh
+./scripts/init-vault-agent.sh
 ./scripts/doctor.sh
 ```
 
@@ -58,8 +60,34 @@ docker compose --profile ai up -d
 Open:
 
 - Brain Console: `http://100.70.195.79:8080`
+- Syncthing: `http://100.70.195.79:8384`
 - AnythingLLM: `http://100.70.195.79:3001`
 - CouchDB Fauxton: `http://100.70.195.79:5984/_utils`
+
+## Direct Vault Agent
+
+The core workflow is direct filesystem access, not RAG.
+
+Sync your Obsidian vault to:
+
+```bash
+~/SecondSecondBrain/ops/brain-stack/vault
+```
+
+Use Syncthing to pair your laptop vault folder with the server folder `/vault` in the Syncthing container. Once the files exist on the server, launch a coding agent inside the vault:
+
+```bash
+cd ~/SecondSecondBrain/ops/brain-stack
+./scripts/open-agent.sh
+```
+
+If the server uses a specific agent CLI:
+
+```bash
+AGENT_COMMAND='codex' ./scripts/open-agent.sh
+```
+
+The agent will read `vault/AGENTS.md` for note-writing rules.
 
 ## Obsidian LiveSync
 
@@ -84,23 +112,10 @@ OLLAMA_MODEL=gemma4:26b ./scripts/pull-model.sh
 
 For a small smoke test, keep the default in `.env`.
 
-For AnythingLLM setup:
-
-- LLM provider: Ollama
-- Ollama base URL from inside Docker: `http://ollama:11434`
-- Chat model: value of `OLLAMA_MODEL` in `.env`
-- Embedding provider: Ollama
-- Embedding model: value of `OLLAMA_EMBED_MODEL` in `.env`
-- Vector database: LanceDB
-
 ## Important Architecture Note
 
-CouchDB LiveSync stores the synced vault as CouchDB documents. It does not automatically create a normal server-side Markdown folder that AnythingLLM can read and write.
+CouchDB LiveSync stores the synced vault as CouchDB documents. It does not automatically create a normal server-side Markdown folder that a coding agent can read and write.
 
-This repo mounts `ops/brain-stack/vault` into AnythingLLM at `/vault`, but that folder will only sync back to Obsidian after a bridge is added. The next implementation step should be one of:
+This repo mounts `ops/brain-stack/vault` as the real agent workspace. To keep Obsidian and the server agent looking at the same files, use file-level sync such as Syncthing.
 
-- Add a LiveSync-aware bridge/MCP server that can read/write the encrypted CouchDB vault.
-- Add Syncthing/Git for file-level vault sync and keep CouchDB only for Obsidian client sync.
-- Use Obsidian's official Headless Sync if you decide a paid Obsidian Sync account is acceptable.
-
-Until that bridge exists, use AnythingLLM RAG uploads for reading documents and treat `/vault/summaries` as staged generated notes.
+CouchDB can stay available for Obsidian LiveSync, but it is not the agent's read/write path.

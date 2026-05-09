@@ -31,6 +31,10 @@ TAILSCALE_IP=${TAILSCALE_IP_VALUE}
 BRAIN_CONSOLE_PORT=8080
 ANYTHINGLLM_PORT=3001
 COUCHDB_PORT=5984
+SYNCTHING_PORT=8384
+HOST_UID=$(id -u)
+HOST_GID=$(id -g)
+TZ=${TZ:-America/New_York}
 
 COUCHDB_USER=brainadmin
 COUCHDB_PASSWORD=$(random_secret)
@@ -38,12 +42,25 @@ COUCHDB_SECRET=$(random_secret)
 OBSIDIAN_DB=second_brain
 
 OLLAMA_MODEL=gemma4:e4b
-OLLAMA_EMBED_MODEL=nomic-embed-text
 ENV
   echo "created .env"
 else
   echo ".env already exists"
 fi
+
+ensure_env_key() {
+  local key="$1"
+  local value="$2"
+  if ! grep -q "^${key}=" .env; then
+    printf '%s=%s\n' "$key" "$value" >> .env
+    echo "added ${key} to .env"
+  fi
+}
+
+ensure_env_key "SYNCTHING_PORT" "8384"
+ensure_env_key "HOST_UID" "$(id -u)"
+ensure_env_key "HOST_GID" "$(id -g)"
+ensure_env_key "TZ" "${TZ:-America/New_York}"
 
 if [[ ! -f .anythingllm.env ]]; then
   cat > .anythingllm.env <<ENV

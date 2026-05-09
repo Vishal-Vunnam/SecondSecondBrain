@@ -49,8 +49,8 @@
             <strong>Obsidian LiveSync</strong>
           </div>
           <div>
-            <span class="metric-label">Vector Store</span>
-            <strong>LanceDB</strong>
+            <span class="metric-label">Agent Workspace</span>
+            <strong>Vault Files</strong>
           </div>
           <div>
             <span class="metric-label">Model Runner</span>
@@ -83,13 +83,23 @@
             <a class="service-link external-link" data-port="5984" data-path="/_utils" href="#">Fauxton</a>
           </article>
 
+          <article class="service-card" data-service="syncthing">
+            <div class="service-header">
+              <span class="status-dot checking"></span>
+              <span class="service-kicker">Files</span>
+            </div>
+            <h2>Syncthing</h2>
+            <p>File-level sync for the real Obsidian vault folder.</p>
+            <a class="service-link external-link" data-port="8384" data-path="/" href="#">Open</a>
+          </article>
+
           <article class="service-card" data-service="anythingllm">
             <div class="service-header">
               <span class="status-dot checking"></span>
-              <span class="service-kicker">Agent</span>
+              <span class="service-kicker">Optional</span>
             </div>
             <h2>AnythingLLM</h2>
-            <p>Workspace, RAG, and agent skill control plane.</p>
+            <p>Optional chat UI; the primary agent path is the vault folder.</p>
             <a class="service-link external-link" data-port="3001" data-path="/" href="#">Open</a>
           </article>
 
@@ -125,8 +135,8 @@
               </div>
               <div class="edge"></div>
               <div class="node storage">
-                <span class="node-label">Storage</span>
-                <strong>CouchDB</strong>
+                <span class="node-label">Agent Workspace</span>
+                <strong>Vault Files</strong>
               </div>
             </div>
           </article>
@@ -157,7 +167,7 @@
                 <span class="step-index">03</span>
                 <div>
                   <strong>Connect agent</strong>
-                  <span>Ollama provider, LanceDB, vault mount.</span>
+                  <span>Open a coding agent inside the vault.</span>
                 </div>
               </li>
               <li>

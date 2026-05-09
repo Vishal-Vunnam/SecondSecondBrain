@@ -12,6 +12,25 @@ services:
       - ./config/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
       - couchdb
+      - syncthing
+    networks:
+      - brain
+
+  syncthing:
+    image: lscr.io/linuxserver/syncthing:latest
+    container_name: brain-syncthing
+    restart: unless-stopped
+    environment:
+      PUID: "${HOST_UID:-1000}"
+      PGID: "${HOST_GID:-1000}"
+      TZ: "${TZ:-America/New_York}"
+    ports:
+      - "${TAILSCALE_IP:-127.0.0.1}:${SYNCTHING_PORT:-8384}:8384"
+      - "${TAILSCALE_IP:-127.0.0.1}:22000:22000/tcp"
+      - "${TAILSCALE_IP:-127.0.0.1}:21027:21027/udp"
+    volumes:
+      - ./data/syncthing:/config
+      - ./vault:/vault
     networks:
       - brain
 

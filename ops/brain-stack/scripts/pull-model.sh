@@ -27,7 +27,3 @@ fi
 
 docker compose exec ollama ollama pull "${OLLAMA_MODEL}"
 docker compose exec ollama ollama run "${OLLAMA_MODEL}" "Reply with exactly: Brain model ready."
-
-if [[ -n "${OLLAMA_EMBED_MODEL:-}" ]]; then
-  docker compose exec ollama ollama pull "${OLLAMA_EMBED_MODEL}"
-fi

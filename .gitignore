@@ -5,3 +5,5 @@ ops/brain-stack/data/
 ops/brain-stack/vault/**
 !ops/brain-stack/vault/summaries/
 !ops/brain-stack/vault/summaries/.gitkeep
+!ops/brain-stack/templates/
+!ops/brain-stack/templates/**
