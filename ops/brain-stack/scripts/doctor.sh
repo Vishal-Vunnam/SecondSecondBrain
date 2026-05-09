@@ -29,7 +29,9 @@ echo "health:"
 check() {
   local name="$1"
   local url="$2"
-  if curl -fsS --max-time 5 "$url" >/dev/null; then
+  local status
+  status="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 "$url" || true)"
+  if [[ "$status" =~ ^[23][0-9][0-9]$ || "$status" == "401" ]]; then
     printf '%-14s ok  %s\n' "$name" "$url"
   else
     printf '%-14s fail %s\n' "$name" "$url"
