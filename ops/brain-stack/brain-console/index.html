@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Second Brain Console</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="rail" aria-label="Brain navigation">
+        <div class="brand-mark" aria-hidden="true">SB</div>
+        <nav class="rail-nav">
+          <a class="rail-link active" href="#overview" aria-label="Overview">
+            <span></span>
+          </a>
+          <a class="rail-link" href="#services" aria-label="Services">
+            <span></span>
+          </a>
+          <a class="rail-link" href="#runbook" aria-label="Runbook">
+            <span></span>
+          </a>
+        </nav>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar" id="overview">
+          <div>
+            <p class="eyebrow">Private Tailnet</p>
+            <h1>Second Brain Console</h1>
+          </div>
+          <div class="topbar-actions">
+            <span class="network-chip">
+              <span class="chip-dot"></span>
+              <span id="hostLabel">local</span>
+            </span>
+            <button class="icon-button" id="refreshButton" type="button" aria-label="Refresh service health" title="Refresh service health">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M20 12a8 8 0 1 1-2.34-5.66" />
+                <path d="M20 4v6h-6" />
+              </svg>
+            </button>
+          </div>
+        </header>
+
+        <section class="status-strip" aria-label="System summary">
+          <div>
+            <span class="metric-label">Vault Mode</span>
+            <strong>Obsidian LiveSync</strong>
+          </div>
+          <div>
+            <span class="metric-label">Vector Store</span>
+            <strong>LanceDB</strong>
+          </div>
+          <div>
+            <span class="metric-label">Model Runner</span>
+            <strong>Ollama</strong>
+          </div>
+          <div>
+            <span class="metric-label">Agent UI</span>
+            <strong>AnythingLLM</strong>
+          </div>
+        </section>
+
+        <section class="service-grid" id="services" aria-label="Services">
+          <article class="service-card" data-service="console">
+            <div class="service-header">
+              <span class="status-dot checking"></span>
+              <span class="service-kicker">Control</span>
+            </div>
+            <h2>Brain Console</h2>
+            <p>Operational surface for the private stack.</p>
+            <a class="service-link" href="/" aria-label="Open Brain Console">Open</a>
+          </article>
+
+          <article class="service-card" data-service="couchdb">
+            <div class="service-header">
+              <span class="status-dot checking"></span>
+              <span class="service-kicker">Sync</span>
+            </div>
+            <h2>CouchDB</h2>
+            <p>LiveSync backend for Obsidian vault replication.</p>
+            <a class="service-link external-link" data-port="5984" data-path="/_utils" href="#">Fauxton</a>
+          </article>
+
+          <article class="service-card" data-service="anythingllm">
+            <div class="service-header">
+              <span class="status-dot checking"></span>
+              <span class="service-kicker">Agent</span>
+            </div>
+            <h2>AnythingLLM</h2>
+            <p>Workspace, RAG, and agent skill control plane.</p>
+            <a class="service-link external-link" data-port="3001" data-path="/" href="#">Open</a>
+          </article>
+
+          <article class="service-card" data-service="ollama">
+            <div class="service-header">
+              <span class="status-dot checking"></span>
+              <span class="service-kicker">LLM</span>
+            </div>
+            <h2>Ollama</h2>
+            <p>Local model runtime for zero per-token inference.</p>
+            <a class="service-link" href="/health/ollama">Models</a>
+          </article>
+        </section>
+
+        <section class="content-grid">
+          <article class="panel wide-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Architecture</p>
+                <h2>Capture, Sync, Reason, Write Back</h2>
+              </div>
+              <span class="panel-badge">v2026</span>
+            </div>
+            <div class="topology">
+              <div class="node laptop">
+                <span class="node-label">Laptop</span>
+                <strong>Obsidian</strong>
+              </div>
+              <div class="edge"></div>
+              <div class="node server">
+                <span class="node-label">Brain VM</span>
+                <strong>Agent Stack</strong>
+              </div>
+              <div class="edge"></div>
+              <div class="node storage">
+                <span class="node-label">Storage</span>
+                <strong>CouchDB</strong>
+              </div>
+            </div>
+          </article>
+
+          <article class="panel" id="runbook">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Runbook</p>
+                <h2>Bring-up Path</h2>
+              </div>
+            </div>
+            <ol class="run-list">
+              <li>
+                <span class="step-index">01</span>
+                <div>
+                  <strong>Start stack</strong>
+                  <span>Docker services and private bindings.</span>
+                </div>
+              </li>
+              <li>
+                <span class="step-index">02</span>
+                <div>
+                  <strong>Initialize sync</strong>
+                  <span>System databases and LiveSync database.</span>
+                </div>
+              </li>
+              <li>
+                <span class="step-index">03</span>
+                <div>
+                  <strong>Connect agent</strong>
+                  <span>Ollama provider, LanceDB, vault mount.</span>
+                </div>
+              </li>
+              <li>
+                <span class="step-index">04</span>
+                <div>
+                  <strong>Weekly insight</strong>
+                  <span>Summaries generated into vault notes.</span>
+                </div>
+              </li>
+            </ol>
+          </article>
+
+          <article class="panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Agent Contract</p>
+                <h2>Brain Assistant</h2>
+              </div>
+            </div>
+            <div class="contract-list">
+              <div>
+                <span>Search first</span>
+                <strong>Never synthesize blind</strong>
+              </div>
+              <div>
+                <span>Write durable notes</span>
+                <strong>Markdown in summaries</strong>
+              </div>
+              <div>
+                <span>Preserve evidence</span>
+                <strong>Sources and uncertainty</strong>
+              </div>
+            </div>
+          </article>
+        </section>
+      </main>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

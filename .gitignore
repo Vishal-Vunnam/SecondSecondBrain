@@ -1,0 +1,7 @@
+.DS_Store
+ops/brain-stack/.env
+ops/brain-stack/.anythingllm.env
+ops/brain-stack/data/
+ops/brain-stack/vault/**
+!ops/brain-stack/vault/summaries/
+!ops/brain-stack/vault/summaries/.gitkeep

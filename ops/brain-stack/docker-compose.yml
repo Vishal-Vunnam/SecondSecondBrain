@@ -1,0 +1,79 @@
+name: second-brain
+
+services:
+  brain-console:
+    image: nginx:1.27-alpine
+    container_name: brain-console
+    restart: unless-stopped
+    ports:
+      - "${TAILSCALE_IP:-127.0.0.1}:${BRAIN_CONSOLE_PORT:-8080}:80"
+    volumes:
+      - ./brain-console:/usr/share/nginx/html:ro
+      - ./config/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - couchdb
+      - ollama
+      - anythingllm
+    networks:
+      - brain
+
+  couchdb:
+    image: couchdb:3.5
+    container_name: brain-couchdb
+    restart: unless-stopped
+    user: "5984:5984"
+    environment:
+      COUCHDB_USER: "${COUCHDB_USER:?set COUCHDB_USER in .env}"
+      COUCHDB_PASSWORD: "${COUCHDB_PASSWORD:?set COUCHDB_PASSWORD in .env}"
+      COUCHDB_SECRET: "${COUCHDB_SECRET:?set COUCHDB_SECRET in .env}"
+    ports:
+      - "${TAILSCALE_IP:-127.0.0.1}:${COUCHDB_PORT:-5984}:5984"
+    volumes:
+      - ./data/couchdb:/opt/couchdb/data
+      - ./config/couchdb/zz-livesync.ini:/opt/couchdb/etc/local.d/zz-livesync.ini:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:5984/_up >/dev/null || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 10
+    networks:
+      - brain
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: brain-ollama
+    restart: unless-stopped
+    volumes:
+      - ./data/ollama:/root/.ollama
+    expose:
+      - "11434"
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 10
+    networks:
+      - brain
+
+  anythingllm:
+    image: mintplexlabs/anythingllm:latest
+    container_name: brain-anythingllm
+    restart: unless-stopped
+    cap_add:
+      - SYS_ADMIN
+    environment:
+      STORAGE_DIR: /app/server/storage
+    ports:
+      - "${TAILSCALE_IP:-127.0.0.1}:${ANYTHINGLLM_PORT:-3001}:3001"
+    volumes:
+      - ./data/anythingllm:/app/server/storage
+      - ./.anythingllm.env:/app/server/.env
+      - ./vault:/vault
+    depends_on:
+      - ollama
+    networks:
+      - brain
+
+networks:
+  brain:
+    name: second-brain
