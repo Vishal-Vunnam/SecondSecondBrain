@@ -32,6 +32,14 @@ chmod +x scripts/*.sh
 
 If Docker was installed by the bootstrap script, open a new SSH session so the Docker group membership is active.
 
+If you increased the GCP boot disk in the console, grow the Linux partition before starting the stack:
+
+```bash
+cd ops/brain-stack
+./scripts/grow-root-disk.sh
+df -h /
+```
+
 ```bash
 cd ops/brain-stack
 docker compose up -d
