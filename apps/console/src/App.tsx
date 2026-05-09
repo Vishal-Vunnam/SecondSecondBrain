@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { AgentPanel } from "./components/AgentPanel";
 import { LedgerPanel } from "./components/LedgerPanel";
 import { ManuscriptPanel } from "./components/ManuscriptPanel";
 import { Rail } from "./components/Rail";
@@ -171,20 +172,23 @@ export function App() {
           refreshing={refreshing}
           theme={theme}
         />
-        <div className={`workspace-grid focus-${activePanel}`}>
-          <ManuscriptPanel
-            dirty={dirty}
-            file={activeFile}
-            onChange={(content) => {
-              setDraft(content);
-              setDirty(true);
-            }}
-            onSave={saveFile}
-            saving={saving}
-            value={draft}
-          />
-          <LedgerPanel />
-          <TerminalPanel terminalUrl={terminalUrl} />
+        <div className="workspace-page">
+          {activePanel === "notes" && (
+            <ManuscriptPanel
+              dirty={dirty}
+              file={activeFile}
+              onChange={(content) => {
+                setDraft(content);
+                setDirty(true);
+              }}
+              onSave={saveFile}
+              saving={saving}
+              value={draft}
+            />
+          )}
+          {activePanel === "terminal" && <TerminalPanel terminalUrl={terminalUrl} />}
+          {activePanel === "agent" && <AgentPanel terminalUrl={terminalUrl} />}
+          {activePanel === "ledger" && <LedgerPanel />}
         </div>
       </section>
     </main>

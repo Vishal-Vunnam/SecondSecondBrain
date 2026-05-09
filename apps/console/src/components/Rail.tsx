@@ -1,4 +1,4 @@
-import { BookOpenText, GalleryVerticalEnd, Terminal } from "lucide-react";
+import { BookOpenText, Bot, GalleryVerticalEnd, Terminal } from "lucide-react";
 import type { WorkspacePanel } from "../types";
 
 type RailProps = {
@@ -9,6 +9,7 @@ type RailProps = {
 const railItems: Array<{ panel: WorkspacePanel; label: string; icon: typeof BookOpenText }> = [
   { panel: "notes", label: "Notes", icon: BookOpenText },
   { panel: "terminal", label: "Terminal", icon: Terminal },
+  { panel: "agent", label: "Agent", icon: Bot },
   { panel: "ledger", label: "Ledger", icon: GalleryVerticalEnd },
 ];
 

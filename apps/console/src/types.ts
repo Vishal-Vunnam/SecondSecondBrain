@@ -9,7 +9,7 @@ export type Service = {
   endpoint: string;
 };
 
-export type WorkspacePanel = "notes" | "terminal" | "ledger";
+export type WorkspacePanel = "notes" | "terminal" | "agent" | "ledger";
 
 export type AppTheme = "light" | "dark";
 
