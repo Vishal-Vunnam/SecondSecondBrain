@@ -9,7 +9,20 @@ export type Service = {
   endpoint: string;
 };
 
-export type WorkspacePanel = "notes" | "terminal" | "agent" | "ledger";
+export type AppModuleId = "notes" | "agent" | "terminal" | "system" | "health" | "finances";
+
+export type AppModuleStatus = "active" | "planned";
+
+export type AppModuleGroup = "core" | "system" | "life";
+
+export type AppModule = {
+  id: AppModuleId;
+  title: string;
+  shortTitle: string;
+  description: string;
+  group: AppModuleGroup;
+  status: AppModuleStatus;
+};
 
 export type AppTheme = "light" | "dark";
 

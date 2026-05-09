@@ -1,20 +1,24 @@
 import { Moon, RefreshCw, Sun } from "lucide-react";
-import type { AppTheme } from "../types";
+import type { AppModule, AppTheme } from "../types";
 
 type TopbarProps = {
+  activeModule: AppModule;
   onRefresh: () => void;
   onToggleTheme: () => void;
   refreshing: boolean;
   theme: AppTheme;
 };
 
-export function Topbar({ onRefresh, onToggleTheme, refreshing, theme }: TopbarProps) {
+export function Topbar({ activeModule, onRefresh, onToggleTheme, refreshing, theme }: TopbarProps) {
   const host = window.location.hostname || "localhost";
   const ThemeIcon = theme === "dark" ? Sun : Moon;
 
   return (
     <header className="topbar">
-      <h2>Second Brain</h2>
+      <div className="topbar-title">
+        <span>Second Brain</span>
+        <h2>{activeModule.title}</h2>
+      </div>
       <div className="topbar-actions">
         <span className="host-chip">{host}</span>
         <button

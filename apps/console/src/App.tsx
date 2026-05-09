@@ -2,14 +2,16 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AgentPanel } from "./components/AgentPanel";
 import { LedgerPanel } from "./components/LedgerPanel";
 import { ManuscriptPanel } from "./components/ManuscriptPanel";
+import { PlannedModulePanel } from "./components/PlannedModulePanel";
 import { Rail } from "./components/Rail";
 import { TerminalPanel } from "./components/TerminalPanel";
 import { Topbar } from "./components/Topbar";
 import { VaultPane } from "./components/VaultPane";
+import { getAppModule } from "./config/modules";
 import { getCheckingStatuses, probeServices } from "./lib/health";
 import { buildTerminalUrl } from "./lib/terminal";
 import { loadVaultDirectory, loadVaultFile, saveVaultFile } from "./lib/vault";
-import type { AppTheme, ServiceKey, ServiceStatus, VaultEntry, VaultFile, WorkspacePanel } from "./types";
+import type { AppModuleId, AppTheme, ServiceKey, ServiceStatus, VaultEntry, VaultFile } from "./types";
 
 function joinVaultPath(directoryPath: string, fileName: string) {
   return directoryPath ? `${directoryPath}/${fileName}` : fileName;
@@ -34,8 +36,9 @@ export function App() {
   const [draft, setDraft] = useState("");
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [activePanel, setActivePanel] = useState<WorkspacePanel>("notes");
+  const [activeModuleId, setActiveModuleId] = useState<AppModuleId>("notes");
   const [theme, setTheme] = useState<AppTheme>(getInitialTheme);
+  const activeModule = getAppModule(activeModuleId);
 
   const refreshHealth = useCallback(async () => {
     setRefreshing(true);
@@ -152,28 +155,31 @@ export function App() {
   }, [loadDirectory]);
 
   return (
-    <main className="atelier-shell">
-      <Rail activePanel={activePanel} onSelectPanel={setActivePanel} />
-      <VaultPane
-        currentPath={currentDirectory}
-        entries={entries}
-        error={vaultError}
-        loading={vaultLoading}
-        onCreateNote={createNote}
-        onOpenEntry={openEntry}
-        onOpenParent={parentDirectory === null ? undefined : () => loadDirectory(parentDirectory)}
-        selectedPath={activeFile?.path ?? null}
-        statuses={statuses}
-      />
+    <main className={`atelier-shell ${activeModuleId === "notes" ? "with-context" : ""}`}>
+      <Rail activeModuleId={activeModuleId} onSelectModule={setActiveModuleId} />
+      {activeModuleId === "notes" && (
+        <VaultPane
+          currentPath={currentDirectory}
+          entries={entries}
+          error={vaultError}
+          loading={vaultLoading}
+          onCreateNote={createNote}
+          onOpenEntry={openEntry}
+          onOpenParent={parentDirectory === null ? undefined : () => loadDirectory(parentDirectory)}
+          selectedPath={activeFile?.path ?? null}
+          statuses={statuses}
+        />
+      )}
       <section className="workbench">
         <Topbar
+          activeModule={activeModule}
           onRefresh={refreshHealth}
           onToggleTheme={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
           refreshing={refreshing}
           theme={theme}
         />
         <div className="workspace-page">
-          {activePanel === "notes" && (
+          {activeModuleId === "notes" && (
             <ManuscriptPanel
               dirty={dirty}
               file={activeFile}
@@ -186,9 +192,10 @@ export function App() {
               value={draft}
             />
           )}
-          {activePanel === "terminal" && <TerminalPanel terminalUrl={terminalUrl} />}
-          {activePanel === "agent" && <AgentPanel terminalUrl={terminalUrl} />}
-          {activePanel === "ledger" && <LedgerPanel />}
+          {activeModuleId === "terminal" && <TerminalPanel terminalUrl={terminalUrl} />}
+          {activeModuleId === "agent" && <AgentPanel terminalUrl={terminalUrl} />}
+          {activeModuleId === "system" && <LedgerPanel />}
+          {(activeModuleId === "health" || activeModuleId === "finances") && <PlannedModulePanel module={activeModule} />}
         </div>
       </section>
     </main>
