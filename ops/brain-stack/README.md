@@ -47,6 +47,14 @@ docker compose up -d
 ./scripts/doctor.sh
 ```
 
+This default starts the lightweight sync layer and console only. After the disk is resized, start the AI services:
+
+```bash
+cd ops/brain-stack
+docker compose --profile ai up -d
+./scripts/pull-model.sh
+```
+
 Open:
 
 - Brain Console: `http://100.70.195.79:8080`

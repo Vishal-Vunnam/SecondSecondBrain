@@ -12,8 +12,6 @@ services:
       - ./config/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
       - couchdb
-      - ollama
-      - anythingllm
     networks:
       - brain
 
@@ -42,6 +40,8 @@ services:
   ollama:
     image: ollama/ollama:latest
     container_name: brain-ollama
+    profiles:
+      - ai
     restart: unless-stopped
     volumes:
       - ./data/ollama:/root/.ollama
@@ -58,6 +58,8 @@ services:
   anythingllm:
     image: mintplexlabs/anythingllm:latest
     container_name: brain-anythingllm
+    profiles:
+      - ai
     restart: unless-stopped
     cap_add:
       - SYS_ADMIN
