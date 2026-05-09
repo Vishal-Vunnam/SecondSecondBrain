@@ -30,7 +30,7 @@ services:
       - ./data/couchdb:/opt/couchdb/data
       - ./config/couchdb/zz-livesync.ini:/opt/couchdb/etc/local.d/zz-livesync.ini:ro
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:5984/_up >/dev/null || exit 1"]
+      test: ["CMD-SHELL", "curl -fsS -u \"$${COUCHDB_USER}:$${COUCHDB_PASSWORD}\" http://127.0.0.1:5984/_up >/dev/null || exit 1"]
       interval: 20s
       timeout: 5s
       retries: 10

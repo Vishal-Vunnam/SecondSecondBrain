@@ -84,6 +84,15 @@ OLLAMA_MODEL=gemma4:26b ./scripts/pull-model.sh
 
 For a small smoke test, keep the default in `.env`.
 
+For AnythingLLM setup:
+
+- LLM provider: Ollama
+- Ollama base URL from inside Docker: `http://ollama:11434`
+- Chat model: value of `OLLAMA_MODEL` in `.env`
+- Embedding provider: Ollama
+- Embedding model: value of `OLLAMA_EMBED_MODEL` in `.env`
+- Vector database: LanceDB
+
 ## Important Architecture Note
 
 CouchDB LiveSync stores the synced vault as CouchDB documents. It does not automatically create a normal server-side Markdown folder that AnythingLLM can read and write.

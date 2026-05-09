@@ -38,6 +38,7 @@ COUCHDB_SECRET=$(random_secret)
 OBSIDIAN_DB=second_brain
 
 OLLAMA_MODEL=gemma4:e4b
+OLLAMA_EMBED_MODEL=nomic-embed-text
 ENV
   echo "created .env"
 else
