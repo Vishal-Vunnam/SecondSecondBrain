@@ -78,7 +78,14 @@ Use Syncthing to pair your laptop vault folder with the server folder `/vault` i
 
 ```bash
 cd ~/SecondSecondBrain/ops/brain-stack
+./scripts/configure-syncthing.sh
 ./scripts/open-agent.sh
+```
+
+To pair from the terminal, get the laptop Syncthing device ID and rerun:
+
+```bash
+./scripts/configure-syncthing.sh LAPTOP_DEVICE_ID
 ```
 
 If the server uses a specific agent CLI:
