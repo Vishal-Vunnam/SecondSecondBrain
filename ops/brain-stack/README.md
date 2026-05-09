@@ -96,13 +96,13 @@ AGENT_COMMAND='codex' ./scripts/open-agent.sh
 
 The agent will read `vault/AGENTS.md` for note-writing rules.
 
-For a zero per-token Codex terminal agent, run:
+For the hosted OpenAI Codex terminal agent, run:
 
 ```bash
 ./scripts/start-codex.sh
 ```
 
-This uses Codex CLI with `--oss --local-provider ollama`, talks to Ollama at `http://127.0.0.1:11434`, and starts in the vault folder.
+This starts in the vault folder and uses your signed-in OpenAI account. To force the local Ollama model instead, run with `CODEX_USE_OLLAMA=1`.
 
 ## Obsidian LiveSync
 
