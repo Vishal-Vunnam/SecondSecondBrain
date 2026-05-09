@@ -37,6 +37,24 @@ check() {
 }
 
 check "console" "http://${TAILSCALE_IP}:${BRAIN_CONSOLE_PORT}/health/console"
-check "couchdb" "http://${TAILSCALE_IP}:${COUCHDB_PORT}/_up"
-check "anythingllm" "http://${TAILSCALE_IP}:${ANYTHINGLLM_PORT}/"
-docker compose exec ollama ollama list || true
+if [[ -n "${COUCHDB_USER:-}" && -n "${COUCHDB_PASSWORD:-}" ]]; then
+  if curl -fsS --max-time 5 -u "${COUCHDB_USER}:${COUCHDB_PASSWORD}" "http://${TAILSCALE_IP}:${COUCHDB_PORT}/_up" >/dev/null; then
+    printf '%-14s ok  %s\n' "couchdb" "http://${TAILSCALE_IP}:${COUCHDB_PORT}/_up"
+  else
+    printf '%-14s fail %s\n' "couchdb" "http://${TAILSCALE_IP}:${COUCHDB_PORT}/_up"
+  fi
+else
+  check "couchdb" "http://${TAILSCALE_IP}:${COUCHDB_PORT}/_up"
+fi
+
+if docker compose ps --services --status running | grep -qx 'anythingllm'; then
+  check "anythingllm" "http://${TAILSCALE_IP}:${ANYTHINGLLM_PORT}/"
+else
+  printf '%-14s skip %s\n' "anythingllm" "AI profile not running"
+fi
+
+if docker compose ps --services --status running | grep -qx 'ollama'; then
+  docker compose exec ollama ollama list || true
+else
+  printf '%-14s skip %s\n' "ollama" "AI profile not running"
+fi
