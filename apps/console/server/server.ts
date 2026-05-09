@@ -21,6 +21,7 @@ const vaultRoot = path.resolve(process.env.VAULT_ROOT ?? "/vault");
 const tailScaleIp = process.env.TAILSCALE_IP ?? "127.0.0.1";
 const terminalPort = process.env.TERMINAL_PORT ?? "7681";
 const maxFileBytes = Number(process.env.MAX_VAULT_FILE_BYTES ?? 5 * 1024 * 1024);
+const hiddenFileNames = new Set(["AGENTS.md"]);
 
 const contentTypes: Record<string, string> = {
   ".css": "text/css; charset=utf-8",
@@ -69,6 +70,28 @@ function toVaultRelative(absolutePath: string) {
   return relative === "" ? "" : relative.split(path.sep).join("/");
 }
 
+function isVisibleNoteFile(name: string) {
+  return path.extname(name).toLowerCase() === ".md" && !name.startsWith(".") && !hiddenFileNames.has(name);
+}
+
+function isVisibleDirectory(name: string) {
+  return !name.startsWith(".") && !["node_modules", "__pycache__"].includes(name);
+}
+
+async function containsVisibleNotes(directoryPath: string): Promise<boolean> {
+  const children = await readdir(directoryPath, { withFileTypes: true });
+
+  for (const child of children) {
+    if (child.isFile() && isVisibleNoteFile(child.name)) return true;
+
+    if (child.isDirectory() && isVisibleDirectory(child.name)) {
+      if (await containsVisibleNotes(path.join(directoryPath, child.name))) return true;
+    }
+  }
+
+  return false;
+}
+
 async function readJsonBody(req: IncomingMessage) {
   const chunks: Buffer[] = [];
   let size = 0;
@@ -97,10 +120,19 @@ async function listVaultEntries(res: ServerResponse, url: URL) {
 
   const entries = await Promise.all(
     (await readdir(directoryPath, { withFileTypes: true }))
-      .filter((entry) => ![".git", "node_modules", ".stfolder"].includes(entry.name))
-      .map(async (entry): Promise<VaultEntry> => {
+      .filter((entry) => {
+        if (entry.isDirectory()) return isVisibleDirectory(entry.name);
+        if (entry.isFile()) return isVisibleNoteFile(entry.name);
+        return false;
+      })
+      .map(async (entry): Promise<VaultEntry | null> => {
         const entryPath = path.join(directoryPath, entry.name);
         const entryStat = await stat(entryPath);
+
+        if (entry.isDirectory() && !(await containsVisibleNotes(entryPath))) {
+          return null;
+        }
+
         return {
           name: entry.name,
           path: toVaultRelative(entryPath),
@@ -110,8 +142,9 @@ async function listVaultEntries(res: ServerResponse, url: URL) {
         };
       }),
   );
+  const visibleEntries = entries.filter((entry): entry is VaultEntry => entry !== null);
 
-  entries.sort((a, b) => {
+  visibleEntries.sort((a, b) => {
     if (a.type !== b.type) return a.type === "directory" ? -1 : 1;
     return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
   });
@@ -119,7 +152,7 @@ async function listVaultEntries(res: ServerResponse, url: URL) {
   sendJson(res, 200, {
     path: toVaultRelative(directoryPath),
     parentPath: directoryPath === vaultRoot ? null : toVaultRelative(path.dirname(directoryPath)),
-    entries,
+    entries: visibleEntries,
   });
 }
 
