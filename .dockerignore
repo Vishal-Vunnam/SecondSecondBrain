@@ -1,0 +1,9 @@
+.git
+**/node_modules
+**/dist
+**/dist-server
+**/*.tsbuildinfo
+ops/brain-stack/.env
+ops/brain-stack/.anythingllm.env
+ops/brain-stack/data
+ops/brain-stack/vault

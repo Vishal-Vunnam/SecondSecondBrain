@@ -13,8 +13,9 @@ services:
     environment:
       TAILSCALE_IP: "${TAILSCALE_IP:-127.0.0.1}"
       TERMINAL_PORT: "${TERMINAL_PORT:-7681}"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      VAULT_ROOT: /vault
+    volumes:
+      - ./vault:/vault
     depends_on:
       - couchdb
       - syncthing

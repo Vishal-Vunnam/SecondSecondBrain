@@ -19,3 +19,25 @@ export type AgentCommand = {
   command: string;
   label: string;
 };
+
+export type VaultEntry = {
+  name: string;
+  path: string;
+  type: "directory" | "file";
+  size: number;
+  modifiedAt: string;
+};
+
+export type VaultDirectory = {
+  path: string;
+  parentPath: string | null;
+  entries: VaultEntry[];
+};
+
+export type VaultFile = {
+  path: string;
+  name: string;
+  content: string;
+  modifiedAt: string;
+  size: number;
+};

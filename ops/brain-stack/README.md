@@ -4,7 +4,7 @@ Private Obsidian + direct filesystem agent stack for a self-hosted Second Brain.
 
 ## What This Deploys
 
-- `brain-console`: a private web console on port `8080`.
+- `brain-console`: a private web console on port `8080` with direct vault file browsing/editing.
 - `syncthing`: file-level vault sync on port `8384`.
 - `couchdb`: Obsidian Self-hosted LiveSync backend on port `5984`.
 - `ollama`: local model runtime inside Docker.
@@ -98,6 +98,12 @@ nvim .
 ```
 
 The agent will read `vault/AGENTS.md` for note-writing rules.
+
+The Brain Console also mounts the same folder at `/vault` and exposes a local API for the UI:
+
+- `GET /api/vault/tree?path=...` lists a vault folder.
+- `GET /api/vault/file?path=...` reads a text/Markdown file.
+- `PUT /api/vault/file` writes a text/Markdown file.
 
 For the hosted OpenAI Codex terminal agent, run:
 

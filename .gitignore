@@ -1,9 +1,11 @@
 .DS_Store
 node_modules/
 dist/
+dist-server/
 *.tsbuildinfo
 apps/console/node_modules/
 apps/console/dist/
+apps/console/dist-server/
 apps/console/vite.config.js
 apps/console/vite.config.d.ts
 ops/brain-stack/.env

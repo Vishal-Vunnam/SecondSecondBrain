@@ -1,25 +1,43 @@
-export function ManuscriptPanel() {
+import { Save } from "lucide-react";
+import type { VaultFile } from "../types";
+
+type ManuscriptPanelProps = {
+  dirty: boolean;
+  file: VaultFile | null;
+  onChange: (content: string) => void;
+  onSave: () => void;
+  saving: boolean;
+  value: string;
+};
+
+export function ManuscriptPanel({ dirty, file, onChange, onSave, saving, value }: ManuscriptPanelProps) {
   return (
     <section className="manuscript-panel" id="manuscript" aria-label="Active note">
       <div className="folio-bar">
-        <strong>Active note</strong>
+        <div>
+          <strong>{file?.name ?? "No file selected"}</strong>
+          {file && <span>{file.path}</span>}
+        </div>
+        <button disabled={!file || !dirty || saving} onClick={onSave} type="button">
+          <Save size={13} />
+          {saving ? "Saving" : dirty ? "Save" : "Saved"}
+        </button>
       </div>
       <article className="folio-page">
-        <h3>Distributed Systems Synthesis</h3>
-        <p>
-          Obsidian captures. The server mirrors the vault as Markdown. The terminal opens in that folder so any agent
-          can read, write, and compose.
-        </p>
-        <div className="folio-metrics">
-          <div>
-            <span>Sources</span>
-            <strong>class notes, scans, daily fragments</strong>
+        {file ? (
+          <textarea
+            aria-label={`Editing ${file.path}`}
+            className="note-editor"
+            onChange={(event) => onChange(event.target.value)}
+            spellCheck="true"
+            value={value}
+          />
+        ) : (
+          <div className="editor-empty">
+            <h3>Open a note from the vault.</h3>
+            <p>The file tree is backed by the synced server vault at /vault. Opening and saving here writes Markdown.</p>
           </div>
-          <div>
-            <span>Outputs</span>
-            <strong>summaries/, bridge-notes/</strong>
-          </div>
-        </div>
+        )}
       </article>
     </section>
   );
