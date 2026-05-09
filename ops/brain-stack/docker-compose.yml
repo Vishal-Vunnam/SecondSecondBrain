@@ -10,6 +10,9 @@ services:
     restart: unless-stopped
     ports:
       - "${TAILSCALE_IP:-127.0.0.1}:${BRAIN_CONSOLE_PORT:-8080}:80"
+    environment:
+      TAILSCALE_IP: "${TAILSCALE_IP:-127.0.0.1}"
+      TERMINAL_PORT: "${TERMINAL_PORT:-7681}"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
