@@ -24,5 +24,4 @@ exec "$CODEX_BIN" \
   --cd "$VAULT_DIR" \
   --sandbox workspace-write \
   --ask-for-approval on-request \
-  --skip-git-repo-check \
   "You are operating inside Vishal's Obsidian vault. Read AGENTS.md first, then help organize, write, and edit notes directly as Markdown files."
