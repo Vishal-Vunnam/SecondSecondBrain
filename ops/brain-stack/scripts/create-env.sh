@@ -58,6 +58,7 @@ ensure_env_key() {
 }
 
 ensure_env_key "SYNCTHING_PORT" "8384"
+ensure_env_key "OLLAMA_PORT" "11434"
 ensure_env_key "HOST_UID" "$(id -u)"
 ensure_env_key "HOST_GID" "$(id -g)"
 ensure_env_key "TZ" "${TZ:-America/New_York}"

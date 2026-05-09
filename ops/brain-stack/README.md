@@ -96,6 +96,14 @@ AGENT_COMMAND='codex' ./scripts/open-agent.sh
 
 The agent will read `vault/AGENTS.md` for note-writing rules.
 
+For a zero per-token terminal agent, install Aider and run:
+
+```bash
+./scripts/start-aider.sh
+```
+
+This uses Ollama at `http://127.0.0.1:11434` and starts in the vault folder.
+
 ## Obsidian LiveSync
 
 Use the values printed by `./scripts/init-couchdb.sh`:
