@@ -11,38 +11,33 @@ export function VaultPane({ statuses }: VaultPaneProps) {
   return (
     <aside className="vault-pane">
       <header className="pane-heading">
-        <div>
-          <p className="overline">Vault</p>
-          <h1>The Second Brain</h1>
-        </div>
+        <h1>Vault</h1>
         <span className="seal">Live</span>
       </header>
 
       <label className="search-plate">
-        <Search size={15} />
-        <input placeholder="Search archive" aria-label="Search archive" />
+        <Search size={13} />
+        <input placeholder="Search" aria-label="Search archive" />
       </label>
 
-      <nav className="shelf-list" aria-label="Vault shelves">
-        {shelves.map((shelf, index) => (
-          <a className={`shelf-item ${index === 0 ? "active" : ""}`} href="#manuscript" key={shelf.name}>
-            <span>{shelf.count}</span>
-            <div>
+      <div>
+        <p className="section-label">Shelves</p>
+        <nav className="shelf-list" aria-label="Vault shelves">
+          {shelves.map((shelf, index) => (
+            <a className={`shelf-item ${index === 0 ? "active" : ""}`} href="#manuscript" key={shelf.name}>
+              <span>{shelf.count}</span>
               <strong>{shelf.name}</strong>
-              <small>{shelf.detail}</small>
-            </div>
-          </a>
-        ))}
-      </nav>
+            </a>
+          ))}
+        </nav>
+      </div>
 
       <section className="service-ledger" aria-label="Service state">
         {services.map((service) => (
           <div className="service-row" key={service.key}>
             <StatusDot status={statuses[service.key]} />
-            <div>
-              <strong>{service.label}</strong>
-              <span>{service.detail}</span>
-            </div>
+            <strong>{service.label}</strong>
+            <span>{service.detail}</span>
           </div>
         ))}
       </section>

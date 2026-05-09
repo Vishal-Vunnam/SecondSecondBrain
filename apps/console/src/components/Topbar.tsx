@@ -10,14 +10,11 @@ export function Topbar({ onRefresh, refreshing }: TopbarProps) {
 
   return (
     <header className="topbar">
-      <div>
-        <p className="overline">Quiet Research OS</p>
-        <h2>Atelier for notes, synthesis, and agent work</h2>
-      </div>
+      <h2>Second Brain</h2>
       <div className="topbar-actions">
         <span className="host-chip">{host}</span>
         <button className="icon-button" onClick={onRefresh} type="button" aria-label="Refresh status">
-          <RefreshCw size={17} className={refreshing ? "spin" : ""} />
+          <RefreshCw size={14} className={refreshing ? "spin" : ""} />
         </button>
       </div>
     </header>
