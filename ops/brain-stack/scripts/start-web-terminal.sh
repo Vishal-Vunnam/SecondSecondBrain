@@ -33,7 +33,11 @@ nohup "$TTYD_BIN" \
   -c "${TERMINAL_USER}:${TERMINAL_PASSWORD}" \
   -W \
   -t titleFixed="Second Brain Terminal" \
-  -t fontSize=14 \
+  -t fontFamily="JetBrains Mono, SFMono-Regular, Menlo, Consolas, monospace" \
+  -t fontSize=13 \
+  -t lineHeight=1.18 \
+  -t cursorBlink=true \
+  -t 'theme={"background":"#0f1516","foreground":"#c3c8c7","cursor":"#d2691e","selectionBackground":"#31738155","black":"#0f1516","red":"#b84443","green":"#317381","yellow":"#d2691e","blue":"#317381","magenta":"#b84443","cyan":"#317381","white":"#c3c8c7","brightBlack":"#70735c","brightRed":"#b84443","brightGreen":"#4f8c96","brightYellow":"#d2691e","brightBlue":"#5f9aa5","brightMagenta":"#c96463","brightCyan":"#74aab3","brightWhite":"#edf0ee"}' \
   bash -lc "cd '$VAULT_DIR' && exec bash -l" \
   >"$LOG_FILE" 2>&1 &
 

@@ -8,10 +8,16 @@ import { VaultPane } from "./components/VaultPane";
 import { getCheckingStatuses, probeServices } from "./lib/health";
 import { buildTerminalUrl } from "./lib/terminal";
 import { loadVaultDirectory, loadVaultFile, saveVaultFile } from "./lib/vault";
-import type { ServiceKey, ServiceStatus, VaultEntry, VaultFile } from "./types";
+import type { AppTheme, ServiceKey, ServiceStatus, VaultEntry, VaultFile, WorkspacePanel } from "./types";
 
 function joinVaultPath(directoryPath: string, fileName: string) {
   return directoryPath ? `${directoryPath}/${fileName}` : fileName;
+}
+
+function getInitialTheme(): AppTheme {
+  const stored = window.localStorage.getItem("second-brain-theme");
+  if (stored === "light" || stored === "dark") return stored;
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
 export function App() {
@@ -27,6 +33,8 @@ export function App() {
   const [draft, setDraft] = useState("");
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [activePanel, setActivePanel] = useState<WorkspacePanel>("notes");
+  const [theme, setTheme] = useState<AppTheme>(getInitialTheme);
 
   const refreshHealth = useCallback(async () => {
     setRefreshing(true);
@@ -40,6 +48,11 @@ export function App() {
   useEffect(() => {
     refreshHealth();
   }, [refreshHealth]);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    window.localStorage.setItem("second-brain-theme", theme);
+  }, [theme]);
 
   const loadDirectory = useCallback(async (path = "") => {
     setVaultLoading(true);
@@ -139,7 +152,7 @@ export function App() {
 
   return (
     <main className="atelier-shell">
-      <Rail />
+      <Rail activePanel={activePanel} onSelectPanel={setActivePanel} />
       <VaultPane
         currentPath={currentDirectory}
         entries={entries}
@@ -152,8 +165,13 @@ export function App() {
         statuses={statuses}
       />
       <section className="workbench">
-        <Topbar onRefresh={refreshHealth} refreshing={refreshing} />
-        <div className="workspace-grid">
+        <Topbar
+          onRefresh={refreshHealth}
+          onToggleTheme={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
+          refreshing={refreshing}
+          theme={theme}
+        />
+        <div className={`workspace-grid focus-${activePanel}`}>
           <ManuscriptPanel
             dirty={dirty}
             file={activeFile}

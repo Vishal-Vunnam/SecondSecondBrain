@@ -1,4 +1,4 @@
-import { Copy, ExternalLink } from "lucide-react";
+import { Copy, ExternalLink, Terminal } from "lucide-react";
 import { useState } from "react";
 import { agentCommands } from "../config/workspace";
 
@@ -22,8 +22,8 @@ export function TerminalPanel({ terminalUrl }: TerminalPanelProps) {
     <section className="terminal-panel" id="terminal" aria-label="Vault terminal">
       <header className="terminal-heading">
         <div>
-          <p className="overline">Vault Terminal</p>
-          <h3>Open any coding agent here</h3>
+          <Terminal size={15} />
+          <h3>Vault shell</h3>
         </div>
         <a href={terminalUrl} target="_blank" rel="noreferrer" className="terminal-link">
           <ExternalLink size={15} />
@@ -37,6 +37,7 @@ export function TerminalPanel({ terminalUrl }: TerminalPanelProps) {
             key={item.command}
             onClick={() => copyCommand(item.command)}
             type="button"
+            title={`Copy ${item.command}`}
           >
             <Copy size={14} />
             <span>{item.label}</span>

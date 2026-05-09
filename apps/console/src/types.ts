@@ -9,6 +9,10 @@ export type Service = {
   endpoint: string;
 };
 
+export type WorkspacePanel = "notes" | "terminal" | "ledger";
+
+export type AppTheme = "light" | "dark";
+
 export type Shelf = {
   name: string;
   detail: string;

@@ -1,19 +1,38 @@
 import { BookOpenText, GalleryVerticalEnd, Terminal } from "lucide-react";
+import type { WorkspacePanel } from "../types";
 
-export function Rail() {
+type RailProps = {
+  activePanel: WorkspacePanel;
+  onSelectPanel: (panel: WorkspacePanel) => void;
+};
+
+const railItems: Array<{ panel: WorkspacePanel; label: string; icon: typeof BookOpenText }> = [
+  { panel: "notes", label: "Notes", icon: BookOpenText },
+  { panel: "terminal", label: "Terminal", icon: Terminal },
+  { panel: "ledger", label: "Ledger", icon: GalleryVerticalEnd },
+];
+
+export function Rail({ activePanel, onSelectPanel }: RailProps) {
   return (
     <aside className="rail" aria-label="Workspace rail">
       <div className="sigil">SB</div>
       <nav className="rail-nav">
-        <a className="rail-button active" href="#manuscript" aria-label="Manuscript">
-          <BookOpenText size={18} />
-        </a>
-        <a className="rail-button" href="#terminal" aria-label="Terminal">
-          <Terminal size={18} />
-        </a>
-        <a className="rail-button" href="#ledger" aria-label="Ledger">
-          <GalleryVerticalEnd size={18} />
-        </a>
+        {railItems.map((item) => {
+          const Icon = item.icon;
+          return (
+            <button
+              aria-label={item.label}
+              aria-pressed={activePanel === item.panel}
+              className={`rail-button ${activePanel === item.panel ? "active" : ""}`}
+              key={item.panel}
+              onClick={() => onSelectPanel(item.panel)}
+              title={item.label}
+              type="button"
+            >
+              <Icon size={18} />
+            </button>
+          );
+        })}
       </nav>
     </aside>
   );
