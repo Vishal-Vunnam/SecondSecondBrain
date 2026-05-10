@@ -39,6 +39,59 @@ The GCP firewall must allow public TCP `80` and `443` to the VM so Caddy can iss
 
 Your login password is `BRAIN_CONSOLE_PASSWORD` in `.env`. The terminal has its own basic-auth password in `TERMINAL_PASSWORD`.
 
+## Voice Task Intake
+
+The console exposes a phone-friendly task capture API:
+
+```text
+POST https://ai.vishalvunnam.com/api/intake/task
+Authorization: Bearer <VISHAL_AI_INTAKE_TOKEN>
+Content-Type: application/json
+```
+
+Body:
+
+```json
+{
+  "text": "Remind me tomorrow afternoon to email Professor Smith about the distributed systems paper, high priority.",
+  "source": "ios-shortcut",
+  "timezone": "America/New_York"
+}
+```
+
+The server keeps your Gemini key private, asks Gemini to extract structured task data, and writes a Markdown task into `vault/tasks/`.
+
+Required `.env` values:
+
+```bash
+GEMINI_API_KEY=your_google_ai_studio_key
+GEMINI_TASK_MODEL=gemini-2.5-flash
+VISHAL_AI_INTAKE_TOKEN=random_shared_secret_for_shortcuts
+```
+
+To inspect the token for Apple Shortcuts:
+
+```bash
+grep '^VISHAL_AI_INTAKE_TOKEN=' .env
+```
+
+Apple Shortcut shape:
+
+```text
+Dictate Text
+Get Contents of URL
+  URL: https://ai.vishalvunnam.com/api/intake/task
+  Method: POST
+  Headers:
+    Authorization: Bearer <VISHAL_AI_INTAKE_TOKEN>
+    Content-Type: application/json
+  JSON:
+    text: Dictated Text
+    source: ios-shortcut
+    timezone: America/New_York
+Show Notification: Task added
+```
+
 ## Current VM Constraint
 
 The inspected VM has a 10 GB boot disk with about 6.4 GB free and no detected GPU. That is not enough for `gemma4:26b`, whose Ollama artifact is much larger than the available disk. Resize the VM disk before pulling real models.

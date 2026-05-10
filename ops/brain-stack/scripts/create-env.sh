@@ -32,7 +32,10 @@ PUBLIC_HOSTNAME=ai.vishalvunnam.com
 BRAIN_CONSOLE_PORT=8080
 BRAIN_CONSOLE_PASSWORD=$(random_secret)
 BRAIN_CONSOLE_SESSION_SECRET=$(random_secret)
+VISHAL_AI_INTAKE_TOKEN=$(random_secret)
 COOKIE_SECURE=false
+GEMINI_API_KEY=
+GEMINI_TASK_MODEL=gemini-2.5-flash
 ANYTHINGLLM_PORT=3001
 COUCHDB_PORT=5984
 SYNCTHING_PORT=8384
@@ -77,6 +80,12 @@ if ! grep -q "^BRAIN_CONSOLE_SESSION_SECRET=" .env; then
   printf 'BRAIN_CONSOLE_SESSION_SECRET=%s\n' "$(random_secret)" >> .env
   echo "added BRAIN_CONSOLE_SESSION_SECRET to .env"
 fi
+if ! grep -q "^VISHAL_AI_INTAKE_TOKEN=" .env; then
+  printf 'VISHAL_AI_INTAKE_TOKEN=%s\n' "$(random_secret)" >> .env
+  echo "added VISHAL_AI_INTAKE_TOKEN to .env"
+fi
+ensure_env_key "GEMINI_API_KEY" ""
+ensure_env_key "GEMINI_TASK_MODEL" "gemini-2.5-flash"
 ensure_env_key "TERMINAL_PORT" "7681"
 ensure_env_key "TERMINAL_BASE_PATH" ""
 ensure_env_key "TERMINAL_USER" "brain"

@@ -45,6 +45,30 @@ type TaskItem = {
   body: string;
 };
 
+type TaskDraft = {
+  title: string;
+  status?: TaskStatus;
+  priority?: TaskPriority;
+  due?: string;
+  project?: string;
+  links: string[];
+  context?: string;
+  nextAction?: string;
+};
+
+type GeminiTaskResponse = {
+  candidates?: Array<{
+    content?: {
+      parts?: Array<{
+        text?: string;
+      }>;
+    };
+  }>;
+  error?: {
+    message?: string;
+  };
+};
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const port = Number(process.env.PORT ?? 80);
@@ -63,6 +87,9 @@ const newsSource = process.env.NEWS_SOURCE ?? "BBC News";
 const newsFeedUrl = process.env.NEWS_RSS_URL ?? "https://feeds.bbci.co.uk/news/rss.xml";
 const authPassword = process.env.BRAIN_CONSOLE_PASSWORD ?? process.env.VISHAL_AI_PASSWORD ?? "";
 const authSecret = process.env.BRAIN_CONSOLE_SESSION_SECRET ?? process.env.VISHAL_AI_SESSION_SECRET ?? authPassword;
+const intakeToken = process.env.VISHAL_AI_INTAKE_TOKEN ?? "";
+const geminiApiKey = process.env.GEMINI_API_KEY ?? "";
+const geminiTaskModel = process.env.GEMINI_TASK_MODEL ?? "gemini-2.5-flash";
 const authCookieName = "vishal_ai_session";
 const authMaxAgeSeconds = 60 * 60 * 24 * 14;
 
@@ -79,7 +106,7 @@ const contentTypes: Record<string, string> = {
 };
 
 const corsHeaders = {
-  "access-control-allow-headers": "content-type",
+  "access-control-allow-headers": "authorization, content-type",
   "access-control-allow-methods": "GET,POST,PUT,OPTIONS",
   "access-control-allow-credentials": "true",
   "access-control-allow-origin": process.env.CORS_ORIGIN ?? "http://127.0.0.1:5173",
@@ -370,6 +397,20 @@ function normalizeTaskPriority(value: unknown): TaskPriority {
   return value === "low" || value === "high" ? value : "medium";
 }
 
+function cleanOptionalText(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function normalizeLinks(value: unknown) {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .filter((link): link is string => typeof link === "string")
+    .map((link) => link.trim())
+    .filter(Boolean)
+    .slice(0, 8);
+}
+
 function cleanScalar(value: string) {
   const trimmed = value.trim();
   if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
@@ -442,6 +483,7 @@ function formatTaskMarkdown(input: {
   project?: string;
   links: string[];
   context?: string;
+  nextAction?: string;
 }) {
   const frontmatter = [
     "---",
@@ -456,8 +498,10 @@ function formatTaskMarkdown(input: {
     `created: ${new Date().toISOString()}`,
     "---",
   ];
+  const context = input.context?.trim() ?? "";
+  const nextAction = input.nextAction?.trim() ?? "";
 
-  return `${frontmatter.join("\n")}\n\n# ${input.title}\n\n## Context\n${input.context?.trim() ?? ""}\n`;
+  return `${frontmatter.join("\n")}\n\n# ${input.title}\n\n## Context\n${context}\n\n## Next Action\n${nextAction}\n`;
 }
 
 function parseTaskFile(relativePath: string, content: string, modifiedAt: string): TaskItem {
@@ -534,6 +578,29 @@ async function uniqueTaskPath(title: string) {
   }
 }
 
+async function writeTask(input: TaskDraft) {
+  const title = input.title.trim();
+  if (!title) {
+    throw Object.assign(new Error("Task title cannot be empty"), { statusCode: 400 });
+  }
+
+  const filePath = await uniqueTaskPath(title);
+  const content = formatTaskMarkdown({
+    title,
+    status: normalizeTaskStatus(input.status),
+    priority: normalizeTaskPriority(input.priority),
+    due: cleanOptionalText(input.due),
+    project: cleanOptionalText(input.project),
+    links: normalizeLinks(input.links),
+    context: cleanOptionalText(input.context),
+    nextAction: cleanOptionalText(input.nextAction),
+  });
+
+  await writeFile(filePath, content, "utf8");
+  const fileStat = await stat(filePath);
+  return parseTaskFile(toVaultRelative(filePath), content, fileStat.mtime.toISOString());
+}
+
 async function createTask(req: IncomingMessage, res: ServerResponse) {
   const body = await readJsonBody(req);
   if (typeof body !== "object" || body === null || typeof (body as { title?: unknown }).title !== "string") {
@@ -549,29 +616,17 @@ async function createTask(req: IncomingMessage, res: ServerResponse) {
     project?: unknown;
     title: string;
   };
-  const title = input.title.trim();
-  if (!title) {
-    sendJson(res, 400, { error: "Task title cannot be empty" });
-    return;
-  }
-
-  const links = Array.isArray(input.links)
-    ? input.links.filter((link): link is string => typeof link === "string" && link.trim().length > 0)
-    : [];
-  const filePath = await uniqueTaskPath(title);
-  const content = formatTaskMarkdown({
-    title,
+  const task = await writeTask({
+    title: input.title,
     status: "todo",
     priority: normalizeTaskPriority(input.priority),
-    due: typeof input.due === "string" ? input.due : "",
-    project: typeof input.project === "string" ? input.project : "",
-    links,
-    context: typeof input.context === "string" ? input.context : "",
+    due: cleanOptionalText(input.due),
+    project: cleanOptionalText(input.project),
+    links: normalizeLinks(input.links),
+    context: cleanOptionalText(input.context),
   });
 
-  await writeFile(filePath, content, "utf8");
-  const fileStat = await stat(filePath);
-  sendJson(res, 201, { task: parseTaskFile(toVaultRelative(filePath), content, fileStat.mtime.toISOString()) });
+  sendJson(res, 201, { task });
 }
 
 function replaceFrontmatterField(content: string, key: string, value: string) {
@@ -625,6 +680,145 @@ async function updateTaskStatus(req: IncomingMessage, res: ServerResponse) {
   const fileStat = await stat(filePath);
 
   sendJson(res, 200, { task: parseTaskFile(toVaultRelative(filePath), content, fileStat.mtime.toISOString()) });
+}
+
+function hasValidIntakeToken(req: IncomingMessage) {
+  if (!intakeToken.trim()) return false;
+
+  const header = req.headers.authorization ?? "";
+  const token = header.match(/^Bearer\s+(.+)$/i)?.[1]?.trim() ?? "";
+  return token.length > 0 && safeEqual(token, intakeToken);
+}
+
+function buildTaskIntakePrompt(input: { text: string; source: string; timezone: string }) {
+  return [
+    "You are the voice task intake parser for Vishal.ai, a private Obsidian-backed personal operating system.",
+    "Extract exactly one actionable task from the user's dictated text.",
+    "Return only JSON that matches the provided schema.",
+    "",
+    "Rules:",
+    "- title: concise imperative or noun phrase, no trailing punctuation.",
+    "- status: always todo unless the user explicitly says they are doing it now or it is already done.",
+    "- priority: high for urgent/time-sensitive/important language, low for someday/maybe, otherwise medium.",
+    "- due: YYYY-MM-DD if the user gives a date or relative date; otherwise empty string.",
+    "- project: short project/category if obvious, otherwise empty string.",
+    "- links: Obsidian wikilinks for obvious topics only, like [[Distributed Systems]] or [[Vishal.ai]].",
+    "- context: one or two useful sentences, including any details that should not be lost.",
+    "- nextAction: the smallest concrete next action.",
+    "",
+    `Current server timestamp: ${new Date().toISOString()}`,
+    `User timezone: ${input.timezone}`,
+    `Capture source: ${input.source}`,
+    "",
+    "Dictated text:",
+    input.text,
+  ].join("\n");
+}
+
+function parseGeminiTask(text: string): TaskDraft {
+  const parsed = JSON.parse(text) as {
+    context?: unknown;
+    due?: unknown;
+    links?: unknown;
+    nextAction?: unknown;
+    priority?: unknown;
+    project?: unknown;
+    status?: unknown;
+    title?: unknown;
+  };
+
+  if (typeof parsed.title !== "string" || !parsed.title.trim()) {
+    throw Object.assign(new Error("Gemini did not return a task title"), { statusCode: 502 });
+  }
+
+  return {
+    title: parsed.title,
+    status: normalizeTaskStatus(parsed.status),
+    priority: normalizeTaskPriority(parsed.priority),
+    due: cleanOptionalText(parsed.due),
+    project: cleanOptionalText(parsed.project),
+    links: normalizeLinks(parsed.links),
+    context: cleanOptionalText(parsed.context),
+    nextAction: cleanOptionalText(parsed.nextAction),
+  };
+}
+
+async function parseTaskWithGemini(input: { text: string; source: string; timezone: string }) {
+  if (!geminiApiKey.trim()) {
+    throw Object.assign(new Error("GEMINI_API_KEY is not configured"), { statusCode: 503 });
+  }
+
+  const apiUrl = new URL(`https://generativelanguage.googleapis.com/v1beta/models/${geminiTaskModel}:generateContent`);
+  apiUrl.searchParams.set("key", geminiApiKey);
+
+  const response = await fetch(apiUrl, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    signal: AbortSignal.timeout(12000),
+    body: JSON.stringify({
+      contents: [
+        {
+          parts: [{ text: buildTaskIntakePrompt(input) }],
+        },
+      ],
+      generationConfig: {
+        temperature: 0.1,
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: "OBJECT",
+          properties: {
+            title: { type: "STRING" },
+            status: { type: "STRING", enum: ["todo", "doing", "done"] },
+            priority: { type: "STRING", enum: ["low", "medium", "high"] },
+            due: { type: "STRING" },
+            project: { type: "STRING" },
+            links: { type: "ARRAY", items: { type: "STRING" } },
+            context: { type: "STRING" },
+            nextAction: { type: "STRING" },
+          },
+          required: ["title", "status", "priority", "due", "project", "links", "context", "nextAction"],
+        },
+      },
+    }),
+  });
+
+  const payload = (await response.json()) as GeminiTaskResponse;
+  if (!response.ok) {
+    throw Object.assign(new Error(payload.error?.message ?? `Gemini returned ${response.status}`), { statusCode: 502 });
+  }
+
+  const text = payload.candidates?.[0]?.content?.parts?.find((part) => typeof part.text === "string")?.text;
+  if (!text) {
+    throw Object.assign(new Error("Gemini returned no task JSON"), { statusCode: 502 });
+  }
+
+  return parseGeminiTask(text);
+}
+
+async function intakeTask(req: IncomingMessage, res: ServerResponse) {
+  if (!hasValidIntakeToken(req)) {
+    sendJson(res, 401, { error: "Valid intake bearer token required" });
+    return;
+  }
+
+  const body = await readJsonBody(req);
+  if (typeof body !== "object" || body === null || typeof (body as { text?: unknown }).text !== "string") {
+    sendJson(res, 400, { error: "Expected JSON body with a text string" });
+    return;
+  }
+
+  const text = (body as { text: string }).text.trim();
+  if (!text) {
+    sendJson(res, 400, { error: "Task intake text cannot be empty" });
+    return;
+  }
+
+  const source = cleanOptionalText((body as { source?: unknown }).source) || "voice";
+  const timezone = cleanOptionalText((body as { timezone?: unknown }).timezone) || "America/New_York";
+  const draft = await parseTaskWithGemini({ text, source, timezone });
+  const task = await writeTask(draft);
+
+  sendJson(res, 201, { task, draft });
 }
 
 function asNumber(value: unknown) {
@@ -807,6 +1001,11 @@ async function route(req: IncomingMessage, res: ServerResponse) {
   }
 
   if (await routeAuth(req, res, url.pathname)) {
+    return;
+  }
+
+  if (url.pathname === "/api/intake/task" && req.method === "POST") {
+    await intakeTask(req, res);
     return;
   }
 

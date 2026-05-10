@@ -17,6 +17,9 @@ services:
       BRAIN_CONSOLE_PASSWORD: "${BRAIN_CONSOLE_PASSWORD:-}"
       BRAIN_CONSOLE_SESSION_SECRET: "${BRAIN_CONSOLE_SESSION_SECRET:-}"
       COOKIE_SECURE: "${COOKIE_SECURE:-false}"
+      VISHAL_AI_INTAKE_TOKEN: "${VISHAL_AI_INTAKE_TOKEN:-}"
+      GEMINI_API_KEY: "${GEMINI_API_KEY:-}"
+      GEMINI_TASK_MODEL: "${GEMINI_TASK_MODEL:-gemini-2.5-flash}"
     volumes:
       - ./vault:/vault
     depends_on:
