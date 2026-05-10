@@ -144,6 +144,31 @@ Open:
 - AnythingLLM: `http://100.70.195.79:3001`
 - CouchDB Fauxton: `http://100.70.195.79:5984/_utils`
 
+## Server Updates
+
+After the server is a real Git clone, update and rebuild the hosted console with one command:
+
+```bash
+cd ~/SecondSecondBrain
+./ops/brain-stack/scripts/update-server.sh
+```
+
+That script runs `git pull --ff-only`, refreshes missing `.env` keys, rebuilds `brain-console` and `caddy`, starts the web terminal if it is down, and runs `doctor`.
+
+To install Git hooks so a normal `git pull` automatically rebuilds after new changes land:
+
+```bash
+cd ~/SecondSecondBrain
+./ops/brain-stack/scripts/install-auto-update-hook.sh
+```
+
+The hook does not restart an already-running web terminal because that can kill the shell you are using. To force a terminal restart during a manual update:
+
+```bash
+cd ~/SecondSecondBrain
+RESTART_TERMINAL=1 ./ops/brain-stack/scripts/update-server.sh
+```
+
 ## Direct Vault Agent
 
 The core workflow is direct filesystem access, not RAG.
