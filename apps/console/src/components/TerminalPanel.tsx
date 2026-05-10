@@ -18,7 +18,7 @@ export function TerminalPanel({ terminalUrl }: TerminalPanelProps) {
         </a>
       </header>
       <div className="terminal-frame">
-        <iframe title="Second Brain terminal" src={terminalUrl} />
+        <iframe title="Vishal.ai terminal" src={terminalUrl} />
       </div>
     </section>
   );

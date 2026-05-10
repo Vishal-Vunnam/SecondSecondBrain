@@ -1,13 +1,15 @@
 import { initialStatuses, services } from "../config/workspace";
 import type { ServiceKey, ServiceStatus } from "../types";
+import { apiUrl } from "./api";
 
 async function checkEndpoint(endpoint: string, timeoutMs = 3000) {
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const response = await fetch(endpoint, {
+    const response = await fetch(apiUrl(endpoint), {
       cache: "no-store",
+      credentials: "include",
       signal: controller.signal,
     });
     return response.ok || response.status === 401;

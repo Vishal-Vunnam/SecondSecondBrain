@@ -15,6 +15,9 @@ TAILSCALE_IP="${TAILSCALE_IP:-127.0.0.1}"
 BRAIN_CONSOLE_PORT="${BRAIN_CONSOLE_PORT:-8080}"
 ANYTHINGLLM_PORT="${ANYTHINGLLM_PORT:-3001}"
 COUCHDB_PORT="${COUCHDB_PORT:-5984}"
+TERMINAL_PORT="${TERMINAL_PORT:-7681}"
+TERMINAL_BASE_PATH="${TERMINAL_BASE_PATH:-}"
+TERMINAL_HEALTH_PATH="${TERMINAL_BASE_PATH:-/}"
 
 echo "docker:"
 docker --version
@@ -40,7 +43,7 @@ check() {
 
 check "console" "http://${TAILSCALE_IP}:${BRAIN_CONSOLE_PORT}/health/console"
 check "syncthing" "http://${TAILSCALE_IP}:${SYNCTHING_PORT:-8384}/"
-check "terminal" "http://${TAILSCALE_IP}:${TERMINAL_PORT:-7681}/"
+check "terminal" "http://${TAILSCALE_IP}:${TERMINAL_PORT}${TERMINAL_HEALTH_PATH}"
 if [[ -n "${COUCHDB_USER:-}" && -n "${COUCHDB_PASSWORD:-}" ]]; then
   if curl -fsS --max-time 5 -u "${COUCHDB_USER}:${COUCHDB_PASSWORD}" "http://${TAILSCALE_IP}:${COUCHDB_PORT}/_up" >/dev/null; then
     printf '%-14s ok  %s\n' "couchdb" "http://${TAILSCALE_IP}:${COUCHDB_PORT}/_up"

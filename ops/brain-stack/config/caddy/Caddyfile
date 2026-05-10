@@ -1,0 +1,15 @@
+{$PUBLIC_HOSTNAME:ai.vishalvunnam.com} {
+  encode zstd gzip
+
+  handle /terminal* {
+    reverse_proxy http://{$TAILSCALE_IP:127.0.0.1}:{$TERMINAL_PORT:7681}
+  }
+
+  handle /health/domain {
+    respond "ok" 200
+  }
+
+  handle {
+    reverse_proxy http://{$TAILSCALE_IP:127.0.0.1}:{$BRAIN_CONSOLE_PORT:8080}
+  }
+}

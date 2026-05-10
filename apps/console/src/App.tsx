@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AgentPanel } from "./components/AgentPanel";
+import { AuthPanel } from "./components/AuthPanel";
+import { HomePanel } from "./components/HomePanel";
 import { LedgerPanel } from "./components/LedgerPanel";
 import { ManuscriptPanel } from "./components/ManuscriptPanel";
 import { PlannedModulePanel } from "./components/PlannedModulePanel";
-import { Rail } from "./components/Rail";
+import { TasksPanel } from "./components/TasksPanel";
 import { TerminalPanel } from "./components/TerminalPanel";
 import { Topbar } from "./components/Topbar";
 import { VaultPane } from "./components/VaultPane";
 import { getAppModule } from "./config/modules";
+import { loadAuthStatus, login, logout } from "./lib/auth";
 import { getCheckingStatuses, probeServices } from "./lib/health";
 import { buildTerminalUrl } from "./lib/terminal";
 import { loadVaultDirectory, loadVaultFile, saveVaultFile } from "./lib/vault";
@@ -17,14 +19,24 @@ function joinVaultPath(directoryPath: string, fileName: string) {
   return directoryPath ? `${directoryPath}/${fileName}` : fileName;
 }
 
+const themeCycle: AppTheme[] = ["light", "dark", "guston-light", "guston-dark"];
+
 function getInitialTheme(): AppTheme {
-  const stored = window.localStorage.getItem("second-brain-theme");
-  if (stored === "light" || stored === "dark") return stored;
+  const stored = window.localStorage.getItem("vishal-ai-theme") ?? window.localStorage.getItem("second-brain-theme");
+  if (stored && (themeCycle as string[]).includes(stored)) return stored as AppTheme;
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+function nextTheme(current: AppTheme): AppTheme {
+  const index = themeCycle.indexOf(current);
+  return themeCycle[(index + 1) % themeCycle.length];
 }
 
 export function App() {
   const terminalUrl = useMemo(buildTerminalUrl, []);
+  const [authState, setAuthState] = useState<"checking" | "authenticated" | "locked">("checking");
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [authLoading, setAuthLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [statuses, setStatuses] = useState<Record<ServiceKey, ServiceStatus>>(getCheckingStatuses);
   const [entries, setEntries] = useState<VaultEntry[]>([]);
@@ -36,26 +48,38 @@ export function App() {
   const [draft, setDraft] = useState("");
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [activeModuleId, setActiveModuleId] = useState<AppModuleId>("notes");
+  const [activeModuleId, setActiveModuleId] = useState<AppModuleId>("home");
   const [theme, setTheme] = useState<AppTheme>(getInitialTheme);
   const activeModule = getAppModule(activeModuleId);
+  const authenticated = authState === "authenticated";
 
   const refreshHealth = useCallback(async () => {
+    if (!authenticated) return;
     setRefreshing(true);
     setStatuses(getCheckingStatuses());
 
     const nextStatuses = await probeServices();
     setStatuses(nextStatuses);
     setRefreshing(false);
+  }, [authenticated]);
+
+  useEffect(() => {
+    loadAuthStatus()
+      .then((status) => {
+        setAuthState(status.authenticated ? "authenticated" : "locked");
+      })
+      .catch(() => {
+        setAuthState("locked");
+      });
   }, []);
 
   useEffect(() => {
-    refreshHealth();
-  }, [refreshHealth]);
+    if (authenticated) refreshHealth();
+  }, [authenticated, refreshHealth]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    window.localStorage.setItem("second-brain-theme", theme);
+    window.localStorage.setItem("vishal-ai-theme", theme);
   }, [theme]);
 
   const loadDirectory = useCallback(async (path = "") => {
@@ -150,54 +174,99 @@ export function App() {
     }
   }, [currentDirectory, dirty, entries, loadDirectory]);
 
+  const openTaskNote = useCallback(
+    async (path: string) => {
+      await openFile(path);
+      setActiveModuleId("notes");
+    },
+    [openFile],
+  );
+
   useEffect(() => {
-    loadDirectory();
-  }, [loadDirectory]);
+    if (authenticated) loadDirectory();
+  }, [authenticated, loadDirectory]);
+
+  async function handleLogin(password: string) {
+    setAuthLoading(true);
+    setAuthError(null);
+    try {
+      const status = await login(password);
+      setAuthState(status.authenticated ? "authenticated" : "locked");
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : "Could not unlock Vishal.ai");
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
+  async function handleLogout() {
+    await logout().catch(() => undefined);
+    setAuthState("locked");
+    setEntries([]);
+    setActiveFile(null);
+    setDraft("");
+    setDirty(false);
+  }
+
+  if (authState !== "authenticated") {
+    return <AuthPanel error={authError} loading={authLoading || authState === "checking"} onLogin={handleLogin} />;
+  }
 
   return (
     <main className={`atelier-shell ${activeModuleId === "notes" ? "with-context" : ""}`}>
-      <Rail activeModuleId={activeModuleId} onSelectModule={setActiveModuleId} />
-      {activeModuleId === "notes" && (
-        <VaultPane
-          currentPath={currentDirectory}
-          entries={entries}
-          error={vaultError}
-          loading={vaultLoading}
-          onCreateNote={createNote}
-          onOpenEntry={openEntry}
-          onOpenParent={parentDirectory === null ? undefined : () => loadDirectory(parentDirectory)}
-          selectedPath={activeFile?.path ?? null}
-          statuses={statuses}
-        />
-      )}
-      <section className="workbench">
-        <Topbar
-          activeModule={activeModule}
-          onRefresh={refreshHealth}
-          onToggleTheme={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
-          refreshing={refreshing}
-          theme={theme}
-        />
-        <div className="workspace-page">
-          {activeModuleId === "notes" && (
-            <ManuscriptPanel
-              dirty={dirty}
-              file={activeFile}
-              onChange={(content) => {
-                setDraft(content);
-                setDirty(true);
-              }}
-              onSave={saveFile}
-              saving={saving}
-              value={draft}
-            />
-          )}
-          {activeModuleId === "terminal" && <TerminalPanel terminalUrl={terminalUrl} />}
-          {activeModuleId === "agent" && <AgentPanel terminalUrl={terminalUrl} />}
-          {activeModuleId === "system" && <LedgerPanel />}
-          {(activeModuleId === "health" || activeModuleId === "finances") && <PlannedModulePanel module={activeModule} />}
-        </div>
-      </section>
+      <Topbar
+        activeModule={activeModule}
+        activeModuleId={activeModuleId}
+        onLogout={handleLogout}
+        onRefresh={refreshHealth}
+        onSelectModule={setActiveModuleId}
+        onToggleTheme={() => setTheme(nextTheme)}
+        refreshing={refreshing}
+        theme={theme}
+      />
+      <div className="app-body">
+        {activeModuleId === "notes" && (
+          <VaultPane
+            currentPath={currentDirectory}
+            entries={entries}
+            error={vaultError}
+            loading={vaultLoading}
+            onCreateNote={createNote}
+            onOpenEntry={openEntry}
+            onOpenParent={parentDirectory === null ? undefined : () => loadDirectory(parentDirectory)}
+            selectedPath={activeFile?.path ?? null}
+            statuses={statuses}
+          />
+        )}
+        <section className="workbench">
+          <div className="workspace-page">
+            {activeModuleId === "home" && (
+              <HomePanel
+                noteCount={entries.filter((entry) => entry.type === "file").length}
+                onSelectModule={setActiveModuleId}
+                statuses={statuses}
+              />
+            )}
+            {activeModuleId === "tasks" && <TasksPanel onOpenTask={openTaskNote} />}
+            {activeModuleId === "notes" && (
+              <ManuscriptPanel
+                dirty={dirty}
+                file={activeFile}
+                onChange={(content) => {
+                  setDraft(content);
+                  setDirty(true);
+                }}
+                onSave={saveFile}
+                saving={saving}
+                value={draft}
+              />
+            )}
+            {activeModuleId === "terminal" && <TerminalPanel terminalUrl={terminalUrl} />}
+            {activeModuleId === "system" && <LedgerPanel />}
+            {activeModule.status === "planned" && <PlannedModulePanel module={activeModule} />}
+          </div>
+        </section>
+      </div>
     </main>
   );
 }

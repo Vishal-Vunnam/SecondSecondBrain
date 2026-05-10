@@ -28,11 +28,16 @@ umask 077
 if [[ ! -f .env ]]; then
   cat > .env <<ENV
 TAILSCALE_IP=${TAILSCALE_IP_VALUE}
+PUBLIC_HOSTNAME=ai.vishalvunnam.com
 BRAIN_CONSOLE_PORT=8080
+BRAIN_CONSOLE_PASSWORD=$(random_secret)
+BRAIN_CONSOLE_SESSION_SECRET=$(random_secret)
+COOKIE_SECURE=false
 ANYTHINGLLM_PORT=3001
 COUCHDB_PORT=5984
 SYNCTHING_PORT=8384
 TERMINAL_PORT=7681
+TERMINAL_BASE_PATH=
 TERMINAL_USER=brain
 TERMINAL_PASSWORD=$(random_secret)
 HOST_UID=$(id -u)
@@ -62,7 +67,18 @@ ensure_env_key() {
 
 ensure_env_key "SYNCTHING_PORT" "8384"
 ensure_env_key "OLLAMA_PORT" "11434"
+ensure_env_key "PUBLIC_HOSTNAME" "ai.vishalvunnam.com"
+ensure_env_key "COOKIE_SECURE" "false"
+if ! grep -q "^BRAIN_CONSOLE_PASSWORD=" .env; then
+  printf 'BRAIN_CONSOLE_PASSWORD=%s\n' "$(random_secret)" >> .env
+  echo "added BRAIN_CONSOLE_PASSWORD to .env"
+fi
+if ! grep -q "^BRAIN_CONSOLE_SESSION_SECRET=" .env; then
+  printf 'BRAIN_CONSOLE_SESSION_SECRET=%s\n' "$(random_secret)" >> .env
+  echo "added BRAIN_CONSOLE_SESSION_SECRET to .env"
+fi
 ensure_env_key "TERMINAL_PORT" "7681"
+ensure_env_key "TERMINAL_BASE_PATH" ""
 ensure_env_key "TERMINAL_USER" "brain"
 if ! grep -q "^TERMINAL_PASSWORD=" .env; then
   printf 'TERMINAL_PASSWORD=%s\n' "$(random_secret)" >> .env

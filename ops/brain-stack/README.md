@@ -1,6 +1,6 @@
-# Second Brain Stack
+# Vishal.ai Stack
 
-Private Obsidian + direct filesystem agent stack for a self-hosted Second Brain.
+Private Obsidian + direct filesystem workspace for Vishal.ai.
 
 ## What This Deploys
 
@@ -11,6 +11,33 @@ Private Obsidian + direct filesystem agent stack for a self-hosted Second Brain.
 - `anythingllm`: optional agent UI on port `3001`.
 
 All published ports bind to `TAILSCALE_IP` from `.env`, so the services are intended to be reached over your Tailnet rather than the public internet.
+
+## Public Hostname
+
+To serve the console at `https://ai.vishalvunnam.com`, keep the sync services private and put only the console plus web terminal behind Caddy:
+
+```bash
+cd ops/brain-stack
+./scripts/create-env.sh
+sed -i.bak 's/^PUBLIC_HOSTNAME=.*/PUBLIC_HOSTNAME=ai.vishalvunnam.com/' .env
+sed -i.bak 's/^COOKIE_SECURE=.*/COOKIE_SECURE=true/' .env
+sed -i.bak 's#^TERMINAL_BASE_PATH=.*#TERMINAL_BASE_PATH=/terminal#' .env
+./scripts/stop-web-terminal.sh
+./scripts/start-web-terminal.sh
+docker compose --profile public up -d --build brain-console caddy
+```
+
+In Vercel DNS, add:
+
+```text
+Type: A
+Name: ai
+Value: <GCP VM external IPv4>
+```
+
+The GCP firewall must allow public TCP `80` and `443` to the VM so Caddy can issue and renew the TLS certificate. Do not open CouchDB, Syncthing, Ollama, or AnythingLLM publicly.
+
+Your login password is `BRAIN_CONSOLE_PASSWORD` in `.env`. The terminal has its own basic-auth password in `TERMINAL_PASSWORD`.
 
 ## Current VM Constraint
 

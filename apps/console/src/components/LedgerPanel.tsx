@@ -20,7 +20,7 @@ export function LedgerPanel() {
           <dd>obsidian-vault</dd>
         </div>
         <div>
-          <dt>Agent rules</dt>
+          <dt>Workspace rules</dt>
           <dd>AGENTS.md</dd>
         </div>
         <div>
@@ -39,7 +39,7 @@ export function LedgerPanel() {
         </div>
         <div>
           <Brain size={18} />
-          <span>Agent-neutral workspace</span>
+          <span>Tool-neutral workspace</span>
         </div>
       </div>
     </aside>

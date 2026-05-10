@@ -2,19 +2,27 @@ import type { AppModule, AppModuleId } from "../types";
 
 export const appModules: AppModule[] = [
   {
+    id: "home",
+    title: "Home",
+    shortTitle: "Home",
+    description: "Daily brief, system status, and launch surface.",
+    group: "home",
+    status: "active",
+  },
+  {
     id: "notes",
     title: "Notes",
     shortTitle: "Notes",
     description: "Read, write, and organize the Obsidian vault.",
-    group: "core",
+    group: "knowledge",
     status: "active",
   },
   {
-    id: "agent",
-    title: "Agent",
-    shortTitle: "Agent",
-    description: "Choose agent tools and workflows for work inside the vault.",
-    group: "core",
+    id: "tasks",
+    title: "Tasks",
+    shortTitle: "Tasks",
+    description: "Markdown-backed actions connected to notes.",
+    group: "home",
     status: "active",
   },
   {
@@ -22,7 +30,7 @@ export const appModules: AppModule[] = [
     title: "Terminal",
     shortTitle: "Shell",
     description: "Raw shell access in the synced vault folder.",
-    group: "system",
+    group: "knowledge",
     status: "active",
   },
   {
@@ -30,7 +38,7 @@ export const appModules: AppModule[] = [
     title: "System",
     shortTitle: "System",
     description: "Service state, sync, and infrastructure register.",
-    group: "system",
+    group: "knowledge",
     status: "active",
   },
   {
@@ -38,15 +46,15 @@ export const appModules: AppModule[] = [
     title: "Health",
     shortTitle: "Health",
     description: "A future personal health operating surface.",
-    group: "life",
+    group: "health",
     status: "planned",
   },
   {
-    id: "finances",
-    title: "Finances",
-    shortTitle: "Money",
-    description: "A future finance, budget, and planning workspace.",
-    group: "life",
+    id: "fitness",
+    title: "Fitness",
+    shortTitle: "Fitness",
+    description: "A future training, recovery, and progress workspace.",
+    group: "fitness",
     status: "planned",
   },
 ];

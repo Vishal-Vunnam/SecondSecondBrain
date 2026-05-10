@@ -19,6 +19,7 @@ TTYD_BIN="${TTYD_BIN:-$HOME/.local/bin/ttyd}"
 PID_DIR="${ROOT_DIR}/data/terminal"
 PID_FILE="${PID_DIR}/ttyd.pid"
 LOG_FILE="${PID_DIR}/ttyd.log"
+TERMINAL_BASE_PATH="${TERMINAL_BASE_PATH:-}"
 
 mkdir -p "$PID_DIR"
 
@@ -27,12 +28,18 @@ if [[ -f "$PID_FILE" ]] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
   exit 0
 fi
 
+BASE_PATH_ARGS=()
+if [[ -n "$TERMINAL_BASE_PATH" ]]; then
+  BASE_PATH_ARGS=(-b "$TERMINAL_BASE_PATH")
+fi
+
 nohup "$TTYD_BIN" \
   -i "${TAILSCALE_IP:-127.0.0.1}" \
   -p "${TERMINAL_PORT:-7681}" \
   -c "${TERMINAL_USER}:${TERMINAL_PASSWORD}" \
   -W \
-  -t titleFixed="Second Brain Terminal" \
+  "${BASE_PATH_ARGS[@]}" \
+  -t titleFixed="Vishal.ai Terminal" \
   -t fontFamily="JetBrains Mono, SFMono-Regular, Menlo, Consolas, monospace" \
   -t fontSize=13 \
   -t lineHeight=1.18 \
@@ -52,7 +59,7 @@ fi
 
 cat <<DONE
 web terminal running:
-  http://${TAILSCALE_IP:-127.0.0.1}:${TERMINAL_PORT:-7681}
+  http://${TAILSCALE_IP:-127.0.0.1}:${TERMINAL_PORT:-7681}${TERMINAL_BASE_PATH:-/}
 
 username:
   ${TERMINAL_USER}
