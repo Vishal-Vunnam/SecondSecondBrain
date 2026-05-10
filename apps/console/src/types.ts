@@ -9,11 +9,11 @@ export type Service = {
   endpoint: string;
 };
 
-export type AppModuleId = "home" | "tasks" | "notes" | "terminal" | "system" | "health" | "fitness";
+export type AppModuleId = "home" | "tasks" | "notes" | "terminal" | "system" | "health" | "health-food" | "fitness" | "health-body";
 
 export type AppModuleStatus = "active" | "planned";
 
-export type AppModuleGroup = "home" | "knowledge" | "health" | "fitness";
+export type AppModuleGroup = "home" | "knowledge" | "health";
 
 export type AppModule = {
   id: AppModuleId;
@@ -100,4 +100,126 @@ export type TaskCreateInput = {
   priority?: TaskPriority;
   project?: string;
   links?: string[];
+};
+
+export type HealthEntryType = "meal" | "workout" | "body" | "commitment";
+
+type HealthLogBase = {
+  id: number;
+  type: HealthEntryType;
+  capturedAt: string;
+  loggedDate: string;
+  source: string | null;
+  summary: string | null;
+  rawText: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type HealthMealEntry = HealthLogBase & {
+  type: "meal";
+  description: string;
+  mealType: string | null;
+  proteinGEstimate: number | null;
+  caloriesEstimate: number | null;
+  hunger: number | null;
+  fullness: number | null;
+  energy: number | null;
+  digestion: number | null;
+  gassiness: number | null;
+  notes: string | null;
+};
+
+export type HealthWorkoutEntry = HealthLogBase & {
+  type: "workout";
+  workoutType: string | null;
+  focus: string | null;
+  muscles: string | null;
+  description: string;
+  durationMinutes: number | null;
+  intensity: number | null;
+  energyBefore: number | null;
+  energyAfter: number | null;
+  performance: number | null;
+  notes: string | null;
+};
+
+export type HealthBodyEntry = HealthLogBase & {
+  type: "body";
+  sleepHours: number | null;
+  sleepQuality: number | null;
+  energy: number | null;
+  moodScore: number | null;
+  soreness: number | null;
+  stress: number | null;
+  hydration: number | null;
+  gassiness: number | null;
+  mood: string | null;
+  pain: string | null;
+  symptoms: string | null;
+  weightLb: number | null;
+  notes: string | null;
+};
+
+export type HealthCommitmentEntry = {
+  id: number;
+  type: "commitment";
+  title: string;
+  description: string | null;
+  cadence: string;
+  targetCount: number | null;
+  completedCount: number;
+  reviewDate: string | null;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type HealthEntry = HealthMealEntry | HealthWorkoutEntry | HealthBodyEntry | HealthCommitmentEntry;
+
+export type HealthOverview = {
+  generatedAt: string;
+  today: {
+    date: string;
+    meals: {
+      count: number;
+      proteinGEstimate: number | null;
+      caloriesEstimate: number | null;
+      lastDescription: string | null;
+    };
+    workouts: {
+      count: number;
+      durationMinutes: number | null;
+      averageIntensity: number | null;
+      lastDescription: string | null;
+    };
+    body: {
+      count: number;
+      sleepHours: number | null;
+      sleepQuality: number | null;
+      energy: number | null;
+      moodScore: number | null;
+      soreness: number | null;
+      stress: number | null;
+      hydration: number | null;
+      gassiness: number | null;
+      mood: string | null;
+      pain: string | null;
+      symptoms: string | null;
+    };
+    commitments: {
+      activeCount: number;
+      dueCount: number;
+      next: HealthCommitmentEntry | null;
+    };
+  };
+  insights: string[];
+  commitments: HealthCommitmentEntry[];
+  recent: HealthEntry[];
+};
+
+export type HealthCaptureResponse = {
+  confirmation: string;
+  route: HealthEntryType | "mixed";
+  entries: HealthEntry[];
 };

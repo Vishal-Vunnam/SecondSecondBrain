@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AuthPanel } from "./components/AuthPanel";
+import { HealthPanel } from "./components/HealthPanel";
 import { HomePanel } from "./components/HomePanel";
 import { LedgerPanel } from "./components/LedgerPanel";
 import { ManuscriptPanel } from "./components/ManuscriptPanel";
@@ -248,6 +249,7 @@ export function App() {
               />
             )}
             {activeModuleId === "tasks" && <TasksPanel onOpenTask={openTaskNote} />}
+            {activeModuleId === "health" && <HealthPanel />}
             {activeModuleId === "notes" && (
               <ManuscriptPanel
                 dirty={dirty}

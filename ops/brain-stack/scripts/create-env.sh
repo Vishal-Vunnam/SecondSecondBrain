@@ -33,9 +33,11 @@ BRAIN_CONSOLE_PORT=8080
 BRAIN_CONSOLE_PASSWORD=$(random_secret)
 BRAIN_CONSOLE_SESSION_SECRET=$(random_secret)
 VISHAL_AI_INTAKE_TOKEN=$(random_secret)
+VISHAL_AI_DB_PATH=/data/vishal-ai.db
 COOKIE_SECURE=false
 GEMINI_API_KEY=
 GEMINI_TASK_MODEL=gemini-2.5-flash
+GEMINI_HEALTH_MODEL=gemini-2.5-flash-lite
 ANYTHINGLLM_PORT=3001
 COUCHDB_PORT=5984
 SYNCTHING_PORT=8384
@@ -86,6 +88,8 @@ if ! grep -q "^VISHAL_AI_INTAKE_TOKEN=" .env; then
 fi
 ensure_env_key "GEMINI_API_KEY" ""
 ensure_env_key "GEMINI_TASK_MODEL" "gemini-2.5-flash"
+ensure_env_key "GEMINI_HEALTH_MODEL" "gemini-2.5-flash-lite"
+ensure_env_key "VISHAL_AI_DB_PATH" "/data/vishal-ai.db"
 ensure_env_key "TERMINAL_PORT" "7681"
 ensure_env_key "TERMINAL_BASE_PATH" ""
 ensure_env_key "TERMINAL_USER" "brain"

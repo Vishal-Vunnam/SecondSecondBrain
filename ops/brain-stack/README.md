@@ -92,6 +92,52 @@ Get Contents of URL
 Show Notification: Task added
 ```
 
+## Voice Health Intake
+
+Health uses SQLite as its canonical store at `VISHAL_AI_DB_PATH`, mounted in Docker as `/data/vishal-ai.db`. The console runs the idempotent schema migration on startup.
+
+```text
+POST https://ai.vishalvunnam.com/api/intake/health
+Authorization: Bearer <VISHAL_AI_INTAKE_TOKEN>
+Content-Type: application/json
+```
+
+Body:
+
+```json
+{
+  "text": "Ate eggs and Greek yogurt for breakfast, lifted legs for 45 minutes, slept 6 hours and feel sore.",
+  "source": "ios-shortcut",
+  "timezone": "America/New_York"
+}
+```
+
+Required `.env` values:
+
+```bash
+GEMINI_API_KEY=your_google_ai_studio_key
+GEMINI_HEALTH_MODEL=gemini-2.5-flash-lite
+VISHAL_AI_DB_PATH=/data/vishal-ai.db
+VISHAL_AI_INTAKE_TOKEN=random_shared_secret_for_shortcuts
+```
+
+Apple Shortcut shape:
+
+```text
+Dictate Text
+Get Contents of URL
+  URL: https://ai.vishalvunnam.com/api/intake/health
+  Method: POST
+  Headers:
+    Authorization: Bearer <VISHAL_AI_INTAKE_TOKEN>
+    Content-Type: application/json
+  JSON:
+    text: Dictated Text
+    source: ios-shortcut
+    timezone: America/New_York
+Show Result: confirmation
+```
+
 ## Current VM Constraint
 
 The inspected VM has a 10 GB boot disk with about 6.4 GB free and no detected GPU. That is not enough for `gemma4:26b`, whose Ollama artifact is much larger than the available disk. Resize the VM disk before pulling real models.

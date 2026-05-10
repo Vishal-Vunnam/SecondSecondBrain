@@ -6,6 +6,7 @@ import {
   Dumbbell,
   GalleryVerticalEnd,
   Glasses,
+  HeartPulse,
   Home,
   ListTodo,
   LogOut,
@@ -14,6 +15,7 @@ import {
   RefreshCw,
   Sun,
   Terminal,
+  Utensils,
 } from "lucide-react";
 import { appModules } from "../config/modules";
 import type { AppModule, AppModuleId, AppTheme } from "../types";
@@ -36,10 +38,12 @@ const moduleIcons: Record<AppModuleId, typeof BookOpenText> = {
   terminal: Terminal,
   system: GalleryVerticalEnd,
   health: Activity,
+  "health-food": Utensils,
   fitness: Dumbbell,
+  "health-body": HeartPulse,
 };
 
-type NavDropdownId = "knowledge" | "health" | "fitness";
+type NavDropdownId = "knowledge" | "health";
 
 type NavDropdown = {
   id: NavDropdownId;
@@ -62,16 +66,9 @@ const navDropdowns: NavDropdown[] = [
   {
     id: "health",
     label: "Health",
-    description: "Health pages will be implemented here.",
+    description: "Overview, food, fitness, and body logs.",
     Icon: Activity,
-    moduleIds: ["health"],
-  },
-  {
-    id: "fitness",
-    label: "Fitness",
-    description: "Fitness pages will be implemented here.",
-    Icon: Dumbbell,
-    moduleIds: ["fitness"],
+    moduleIds: ["health", "health-food", "fitness", "health-body"],
   },
 ];
 
@@ -142,12 +139,12 @@ export function Topbar({ activeModule, activeModuleId, onLogout, onRefresh, onSe
   return (
     <header className="topbar">
       <div className="topbar-title">
-        <span className="brand-mark" aria-hidden="true">
-          <Glasses size={18} />
-        </span>
         <div>
           <h1 className="brand-wordmark">vishal.ai</h1>
         </div>
+        <span className="brand-mark" aria-hidden="true">
+          <Glasses size={18} />
+        </span>
       </div>
       <nav className="module-nav" aria-label="Application modules" ref={navRef}>
         {primaryModules.map((module) => renderModuleButton(module))}

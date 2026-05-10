@@ -1,8 +1,9 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { constants } from "node:fs";
+import { constants, mkdirSync } from "node:fs";
 import { access, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 
 type VaultEntry = {
@@ -69,6 +70,150 @@ type GeminiTaskResponse = {
   };
 };
 
+type GeminiJsonResponse = GeminiTaskResponse;
+
+type HealthEntryType = "meal" | "workout" | "body" | "commitment";
+type HealthRouteType = HealthEntryType | "mixed";
+
+type HealthMealDraft = {
+  summary?: string;
+  description: string;
+  mealType?: string;
+  proteinGEstimate?: number | null;
+  caloriesEstimate?: number | null;
+  hunger?: number | null;
+  fullness?: number | null;
+  energy?: number | null;
+  digestion?: number | null;
+  gassiness?: number | null;
+  notes?: string;
+};
+
+type HealthWorkoutDraft = {
+  summary?: string;
+  workoutType?: string;
+  focus?: string;
+  muscles?: string;
+  description: string;
+  durationMinutes?: number | null;
+  intensity?: number | null;
+  energyBefore?: number | null;
+  energyAfter?: number | null;
+  performance?: number | null;
+  notes?: string;
+};
+
+type HealthBodyDraft = {
+  summary?: string;
+  sleepHours?: number | null;
+  sleepQuality?: number | null;
+  energy?: number | null;
+  moodScore?: number | null;
+  soreness?: number | null;
+  stress?: number | null;
+  hydration?: number | null;
+  gassiness?: number | null;
+  mood?: string;
+  pain?: string;
+  symptoms?: string;
+  weightLb?: number | null;
+  notes?: string;
+};
+
+type HealthCommitmentDraft = {
+  title: string;
+  description?: string;
+  cadence?: string;
+  targetCount?: number | null;
+  completedCount?: number | null;
+  reviewDate?: string;
+  status?: string;
+};
+
+type ParsedHealthIntake = {
+  route: HealthRouteType;
+  confirmation: string;
+  meals: HealthMealDraft[];
+  workouts: HealthWorkoutDraft[];
+  bodyLogs: HealthBodyDraft[];
+  commitments: HealthCommitmentDraft[];
+};
+
+type HealthBaseEntry = {
+  id: number;
+  type: HealthEntryType;
+  capturedAt: string;
+  loggedDate: string;
+  source: string | null;
+  rawText: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type HealthMealEntry = HealthBaseEntry & {
+  type: "meal";
+  description: string;
+  mealType: string | null;
+  proteinGEstimate: number | null;
+  caloriesEstimate: number | null;
+  summary: string | null;
+  hunger: number | null;
+  fullness: number | null;
+  energy: number | null;
+  digestion: number | null;
+  gassiness: number | null;
+  notes: string | null;
+};
+
+type HealthWorkoutEntry = HealthBaseEntry & {
+  type: "workout";
+  workoutType: string | null;
+  focus: string | null;
+  muscles: string | null;
+  description: string;
+  summary: string | null;
+  durationMinutes: number | null;
+  intensity: number | null;
+  energyBefore: number | null;
+  energyAfter: number | null;
+  performance: number | null;
+  notes: string | null;
+};
+
+type HealthBodyEntry = HealthBaseEntry & {
+  type: "body";
+  sleepHours: number | null;
+  summary: string | null;
+  sleepQuality: number | null;
+  energy: number | null;
+  moodScore: number | null;
+  soreness: number | null;
+  stress: number | null;
+  hydration: number | null;
+  gassiness: number | null;
+  mood: string | null;
+  pain: string | null;
+  symptoms: string | null;
+  weightLb: number | null;
+  notes: string | null;
+};
+
+type HealthCommitmentEntry = {
+  id: number;
+  type: "commitment";
+  title: string;
+  description: string | null;
+  cadence: string;
+  targetCount: number | null;
+  completedCount: number;
+  reviewDate: string | null;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type HealthEntry = HealthMealEntry | HealthWorkoutEntry | HealthBodyEntry | HealthCommitmentEntry;
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const port = Number(process.env.PORT ?? 80);
@@ -90,6 +235,8 @@ const authSecret = process.env.BRAIN_CONSOLE_SESSION_SECRET ?? process.env.VISHA
 const intakeToken = process.env.VISHAL_AI_INTAKE_TOKEN ?? "";
 const geminiApiKey = process.env.GEMINI_API_KEY ?? "";
 const geminiTaskModel = process.env.GEMINI_TASK_MODEL ?? "gemini-2.5-flash";
+const geminiHealthModel = process.env.GEMINI_HEALTH_MODEL ?? "gemini-2.5-flash-lite";
+const healthDbPath = path.resolve(process.env.VISHAL_AI_DB_PATH ?? path.join(process.cwd(), "data/vishal-ai.db"));
 const authCookieName = "vishal_ai_session";
 const authMaxAgeSeconds = 60 * 60 * 24 * 14;
 
@@ -107,10 +254,14 @@ const contentTypes: Record<string, string> = {
 
 const corsHeaders = {
   "access-control-allow-headers": "authorization, content-type",
-  "access-control-allow-methods": "GET,POST,PUT,OPTIONS",
+  "access-control-allow-methods": "GET,POST,PUT,DELETE,OPTIONS",
   "access-control-allow-credentials": "true",
   "access-control-allow-origin": process.env.CORS_ORIGIN ?? "http://127.0.0.1:5173",
 };
+
+mkdirSync(path.dirname(healthDbPath), { recursive: true });
+const healthDb = new DatabaseSync(healthDbPath);
+migrateHealthDatabase();
 
 function send(res: ServerResponse, status: number, body: string | Buffer = "", headers: Record<string, string> = {}) {
   res.writeHead(status, { ...corsHeaders, ...headers });
@@ -821,6 +972,1185 @@ async function intakeTask(req: IncomingMessage, res: ServerResponse) {
   sendJson(res, 201, { task, draft });
 }
 
+function migrateHealthDatabase() {
+  healthDb.exec(`
+    PRAGMA journal_mode = WAL;
+    PRAGMA foreign_keys = ON;
+
+    CREATE TABLE IF NOT EXISTS health_commitments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      cadence TEXT NOT NULL DEFAULT 'weekly',
+      target_count INTEGER,
+      completed_count INTEGER NOT NULL DEFAULT 0,
+      review_date TEXT,
+      status TEXT NOT NULL DEFAULT 'active',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS health_meals (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      captured_at TEXT NOT NULL,
+      logged_date TEXT NOT NULL,
+      source TEXT,
+      summary TEXT,
+      description TEXT NOT NULL,
+      meal_type TEXT,
+      protein_g_estimate REAL,
+      calories_estimate REAL,
+      hunger INTEGER,
+      fullness INTEGER,
+      energy INTEGER,
+      digestion INTEGER,
+      gassiness INTEGER,
+      notes TEXT,
+      raw_text TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS health_workouts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      captured_at TEXT NOT NULL,
+      logged_date TEXT NOT NULL,
+      source TEXT,
+      summary TEXT,
+      workout_type TEXT,
+      focus TEXT,
+      muscles TEXT,
+      description TEXT NOT NULL,
+      duration_minutes INTEGER,
+      intensity INTEGER,
+      energy_before INTEGER,
+      energy_after INTEGER,
+      performance INTEGER,
+      notes TEXT,
+      raw_text TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS health_body_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      captured_at TEXT NOT NULL,
+      logged_date TEXT NOT NULL,
+      source TEXT,
+      summary TEXT,
+      sleep_hours REAL,
+      sleep_quality INTEGER,
+      energy INTEGER,
+      mood_score INTEGER,
+      soreness INTEGER,
+      stress INTEGER,
+      hydration INTEGER,
+      gassiness INTEGER,
+      mood TEXT,
+      pain TEXT,
+      symptoms TEXT,
+      weight_lb REAL,
+      notes TEXT,
+      raw_text TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS health_insights (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      week_start TEXT NOT NULL,
+      summary TEXT NOT NULL,
+      data TEXT,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_health_meals_logged_date ON health_meals(logged_date);
+    CREATE INDEX IF NOT EXISTS idx_health_workouts_logged_date ON health_workouts(logged_date);
+    CREATE INDEX IF NOT EXISTS idx_health_body_logs_logged_date ON health_body_logs(logged_date);
+    CREATE INDEX IF NOT EXISTS idx_health_commitments_status ON health_commitments(status);
+    PRAGMA user_version = 1;
+  `);
+
+  ensureHealthColumn("health_meals", "hunger", "INTEGER");
+  ensureHealthColumn("health_meals", "summary", "TEXT");
+  ensureHealthColumn("health_meals", "gassiness", "INTEGER");
+  ensureHealthColumn("health_workouts", "summary", "TEXT");
+  ensureHealthColumn("health_workouts", "workout_type", "TEXT");
+  ensureHealthColumn("health_workouts", "muscles", "TEXT");
+  ensureHealthColumn("health_workouts", "performance", "INTEGER");
+  ensureHealthColumn("health_body_logs", "sleep_quality", "INTEGER");
+  ensureHealthColumn("health_body_logs", "summary", "TEXT");
+  ensureHealthColumn("health_body_logs", "mood_score", "INTEGER");
+  ensureHealthColumn("health_body_logs", "stress", "INTEGER");
+  ensureHealthColumn("health_body_logs", "hydration", "INTEGER");
+  ensureHealthColumn("health_body_logs", "gassiness", "INTEGER");
+  ensureHealthColumn("health_body_logs", "pain", "TEXT");
+  ensureHealthColumn("health_body_logs", "symptoms", "TEXT");
+}
+
+function ensureHealthColumn(table: string, column: string, definition: string) {
+  const rows = healthDb.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name?: unknown }>;
+  if (rows.some((row) => row.name === column)) return;
+  healthDb.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+}
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function dateKeyInTimezone(value: Date, timezone: string) {
+  try {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      day: "2-digit",
+      month: "2-digit",
+      timeZone: timezone,
+      year: "numeric",
+    }).formatToParts(value);
+    const part = (type: string) => parts.find((item) => item.type === type)?.value;
+    const year = part("year");
+    const month = part("month");
+    const day = part("day");
+    if (year && month && day) return `${year}-${month}-${day}`;
+  } catch {
+    // Fall through to UTC when the caller sends an unsupported timezone.
+  }
+
+  return value.toISOString().slice(0, 10);
+}
+
+function normalizeCapturedAt(value: unknown) {
+  if (typeof value !== "string" || !value.trim()) return nowIso();
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? nowIso() : date.toISOString();
+}
+
+function cleanOptionalNumber(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function cleanOptionalInteger(value: unknown) {
+  const number = cleanOptionalNumber(value);
+  return number === null ? null : Math.round(number);
+}
+
+function cleanScore(value: unknown) {
+  const score = cleanOptionalInteger(value);
+  if (score === null) return null;
+  return Math.min(5, Math.max(1, score));
+}
+
+function cleanOptionalDate(value: unknown) {
+  if (typeof value !== "string" || !value.trim()) return "";
+  const trimmed = value.trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(trimmed) ? trimmed : "";
+}
+
+function cleanHealthStatus(value: unknown) {
+  return value === "paused" || value === "done" ? value : "active";
+}
+
+function cleanCadence(value: unknown) {
+  const cadence = cleanOptionalText(value).toLowerCase();
+  return cadence || "weekly";
+}
+
+function cleanMealType(value: unknown) {
+  const mealType = cleanOptionalText(value).toLowerCase();
+  if (["breakfast", "lunch", "dinner", "snack", "drink"].includes(mealType)) return mealType;
+  return mealType || "";
+}
+
+function rowText(row: Record<string, unknown>, key: string) {
+  const value = row[key];
+  return typeof value === "string" ? value : null;
+}
+
+function rowRequiredText(row: Record<string, unknown>, key: string) {
+  return rowText(row, key) ?? "";
+}
+
+function rowNumber(row: Record<string, unknown>, key: string) {
+  const value = row[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function rowRequiredNumber(row: Record<string, unknown>, key: string) {
+  return rowNumber(row, key) ?? 0;
+}
+
+function mapMeal(row: Record<string, unknown>): HealthMealEntry {
+  return {
+    id: rowRequiredNumber(row, "id"),
+    type: "meal",
+    capturedAt: rowRequiredText(row, "captured_at"),
+    loggedDate: rowRequiredText(row, "logged_date"),
+    source: rowText(row, "source"),
+    description: rowRequiredText(row, "description"),
+    summary: rowText(row, "summary"),
+    mealType: rowText(row, "meal_type"),
+    proteinGEstimate: rowNumber(row, "protein_g_estimate"),
+    caloriesEstimate: rowNumber(row, "calories_estimate"),
+    hunger: rowNumber(row, "hunger"),
+    fullness: rowNumber(row, "fullness"),
+    energy: rowNumber(row, "energy"),
+    digestion: rowNumber(row, "digestion"),
+    gassiness: rowNumber(row, "gassiness"),
+    notes: rowText(row, "notes"),
+    rawText: rowText(row, "raw_text"),
+    createdAt: rowRequiredText(row, "created_at"),
+    updatedAt: rowRequiredText(row, "updated_at"),
+  };
+}
+
+function mapWorkout(row: Record<string, unknown>): HealthWorkoutEntry {
+  return {
+    id: rowRequiredNumber(row, "id"),
+    type: "workout",
+    capturedAt: rowRequiredText(row, "captured_at"),
+    loggedDate: rowRequiredText(row, "logged_date"),
+    source: rowText(row, "source"),
+    summary: rowText(row, "summary"),
+    workoutType: rowText(row, "workout_type"),
+    focus: rowText(row, "focus"),
+    muscles: rowText(row, "muscles"),
+    description: rowRequiredText(row, "description"),
+    durationMinutes: rowNumber(row, "duration_minutes"),
+    intensity: rowNumber(row, "intensity"),
+    energyBefore: rowNumber(row, "energy_before"),
+    energyAfter: rowNumber(row, "energy_after"),
+    performance: rowNumber(row, "performance"),
+    notes: rowText(row, "notes"),
+    rawText: rowText(row, "raw_text"),
+    createdAt: rowRequiredText(row, "created_at"),
+    updatedAt: rowRequiredText(row, "updated_at"),
+  };
+}
+
+function mapBody(row: Record<string, unknown>): HealthBodyEntry {
+  return {
+    id: rowRequiredNumber(row, "id"),
+    type: "body",
+    capturedAt: rowRequiredText(row, "captured_at"),
+    loggedDate: rowRequiredText(row, "logged_date"),
+    source: rowText(row, "source"),
+    summary: rowText(row, "summary"),
+    sleepHours: rowNumber(row, "sleep_hours"),
+    sleepQuality: rowNumber(row, "sleep_quality"),
+    energy: rowNumber(row, "energy"),
+    moodScore: rowNumber(row, "mood_score"),
+    soreness: rowNumber(row, "soreness"),
+    stress: rowNumber(row, "stress"),
+    hydration: rowNumber(row, "hydration"),
+    gassiness: rowNumber(row, "gassiness"),
+    mood: rowText(row, "mood"),
+    pain: rowText(row, "pain"),
+    symptoms: rowText(row, "symptoms"),
+    weightLb: rowNumber(row, "weight_lb"),
+    notes: rowText(row, "notes"),
+    rawText: rowText(row, "raw_text"),
+    createdAt: rowRequiredText(row, "created_at"),
+    updatedAt: rowRequiredText(row, "updated_at"),
+  };
+}
+
+function mapCommitment(row: Record<string, unknown>): HealthCommitmentEntry {
+  return {
+    id: rowRequiredNumber(row, "id"),
+    type: "commitment",
+    title: rowRequiredText(row, "title"),
+    description: rowText(row, "description"),
+    cadence: rowRequiredText(row, "cadence"),
+    targetCount: rowNumber(row, "target_count"),
+    completedCount: rowRequiredNumber(row, "completed_count"),
+    reviewDate: rowText(row, "review_date"),
+    status: rowRequiredText(row, "status"),
+    createdAt: rowRequiredText(row, "created_at"),
+    updatedAt: rowRequiredText(row, "updated_at"),
+  };
+}
+
+function normalizeHealthEntryType(value: string): HealthEntryType | null {
+  if (value === "meal" || value === "workout" || value === "body" || value === "commitment") return value;
+  if (value === "meals") return "meal";
+  if (value === "workouts") return "workout";
+  if (value === "body_logs") return "body";
+  if (value === "commitments") return "commitment";
+  return null;
+}
+
+function getHealthEntry(type: HealthEntryType, id: number): HealthEntry | null {
+  if (type === "meal") {
+    const row = healthDb.prepare("SELECT * FROM health_meals WHERE id = ?").get(id) as Record<string, unknown> | undefined;
+    return row ? mapMeal(row) : null;
+  }
+  if (type === "workout") {
+    const row = healthDb.prepare("SELECT * FROM health_workouts WHERE id = ?").get(id) as Record<string, unknown> | undefined;
+    return row ? mapWorkout(row) : null;
+  }
+  if (type === "body") {
+    const row = healthDb.prepare("SELECT * FROM health_body_logs WHERE id = ?").get(id) as Record<string, unknown> | undefined;
+    return row ? mapBody(row) : null;
+  }
+  const row = healthDb.prepare("SELECT * FROM health_commitments WHERE id = ?").get(id) as Record<string, unknown> | undefined;
+  return row ? mapCommitment(row) : null;
+}
+
+function insertHealthMeal(input: HealthMealDraft, context: { capturedAt: string; loggedDate: string; source: string; rawText: string }) {
+  const timestamp = nowIso();
+  const result = healthDb
+    .prepare(
+      `INSERT INTO health_meals (
+        captured_at, logged_date, source, summary, description, meal_type, protein_g_estimate, calories_estimate,
+        hunger, fullness, energy, digestion, gassiness, notes, raw_text, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      context.capturedAt,
+      context.loggedDate,
+      context.source,
+      cleanOptionalText(input.summary) || null,
+      input.description.trim(),
+      cleanMealType(input.mealType) || null,
+      cleanOptionalNumber(input.proteinGEstimate),
+      cleanOptionalNumber(input.caloriesEstimate),
+      cleanScore(input.hunger),
+      cleanScore(input.fullness),
+      cleanScore(input.energy),
+      cleanScore(input.digestion),
+      cleanScore(input.gassiness),
+      cleanOptionalText(input.notes) || null,
+      context.rawText,
+      timestamp,
+      timestamp,
+    );
+
+  return getHealthEntry("meal", Number(result.lastInsertRowid));
+}
+
+function insertHealthWorkout(input: HealthWorkoutDraft, context: { capturedAt: string; loggedDate: string; source: string; rawText: string }) {
+  const timestamp = nowIso();
+  const result = healthDb
+    .prepare(
+      `INSERT INTO health_workouts (
+        captured_at, logged_date, source, summary, workout_type, focus, muscles, description, duration_minutes, intensity,
+        energy_before, energy_after, performance, notes, raw_text, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      context.capturedAt,
+      context.loggedDate,
+      context.source,
+      cleanOptionalText(input.summary) || null,
+      cleanOptionalText(input.workoutType) || null,
+      cleanOptionalText(input.focus) || null,
+      cleanOptionalText(input.muscles) || null,
+      input.description.trim(),
+      cleanOptionalInteger(input.durationMinutes),
+      cleanScore(input.intensity),
+      cleanScore(input.energyBefore),
+      cleanScore(input.energyAfter),
+      cleanScore(input.performance),
+      cleanOptionalText(input.notes) || null,
+      context.rawText,
+      timestamp,
+      timestamp,
+    );
+
+  return getHealthEntry("workout", Number(result.lastInsertRowid));
+}
+
+function insertHealthBody(input: HealthBodyDraft, context: { capturedAt: string; loggedDate: string; source: string; rawText: string }) {
+  const timestamp = nowIso();
+  const result = healthDb
+    .prepare(
+      `INSERT INTO health_body_logs (
+        captured_at, logged_date, source, summary, sleep_hours, sleep_quality, energy, mood_score, soreness, stress,
+        hydration, gassiness, mood, pain, symptoms, weight_lb, notes, raw_text, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      context.capturedAt,
+      context.loggedDate,
+      context.source,
+      cleanOptionalText(input.summary) || null,
+      cleanOptionalNumber(input.sleepHours),
+      cleanScore(input.sleepQuality),
+      cleanScore(input.energy),
+      cleanScore(input.moodScore),
+      cleanScore(input.soreness),
+      cleanScore(input.stress),
+      cleanScore(input.hydration),
+      cleanScore(input.gassiness),
+      cleanOptionalText(input.mood) || null,
+      cleanOptionalText(input.pain) || null,
+      cleanOptionalText(input.symptoms) || null,
+      cleanOptionalNumber(input.weightLb),
+      cleanOptionalText(input.notes) || null,
+      context.rawText,
+      timestamp,
+      timestamp,
+    );
+
+  return getHealthEntry("body", Number(result.lastInsertRowid));
+}
+
+function insertHealthCommitment(input: HealthCommitmentDraft) {
+  const title = cleanOptionalText(input.title);
+  if (!title) {
+    throw Object.assign(new Error("Commitment title cannot be empty"), { statusCode: 400 });
+  }
+
+  const timestamp = nowIso();
+  const result = healthDb
+    .prepare(
+      `INSERT INTO health_commitments (
+        title, description, cadence, target_count, completed_count, review_date, status, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      title,
+      cleanOptionalText(input.description),
+      cleanCadence(input.cadence),
+      cleanOptionalInteger(input.targetCount),
+      cleanOptionalInteger(input.completedCount) ?? 0,
+      cleanOptionalDate(input.reviewDate) || null,
+      cleanHealthStatus(input.status),
+      timestamp,
+      timestamp,
+    );
+
+  return getHealthEntry("commitment", Number(result.lastInsertRowid));
+}
+
+function deleteHealthEntry(type: HealthEntryType, id: number) {
+  const table = {
+    body: "health_body_logs",
+    commitment: "health_commitments",
+    meal: "health_meals",
+    workout: "health_workouts",
+  }[type];
+
+  const result = healthDb.prepare(`DELETE FROM ${table} WHERE id = ?`).run(id);
+  return result.changes > 0;
+}
+
+function updateHealthCommitment(id: number, input: Record<string, unknown>) {
+  const existing = getHealthEntry("commitment", id);
+  if (!existing || existing.type !== "commitment") return null;
+
+  const timestamp = nowIso();
+  healthDb
+    .prepare(
+      `UPDATE health_commitments
+       SET title = ?, description = ?, cadence = ?, target_count = ?, completed_count = ?, review_date = ?, status = ?, updated_at = ?
+       WHERE id = ?`,
+    )
+    .run(
+      cleanOptionalText(input.title) || existing.title,
+      "description" in input ? cleanOptionalText(input.description) : (existing.description ?? ""),
+      "cadence" in input ? cleanCadence(input.cadence) : existing.cadence,
+      "targetCount" in input ? cleanOptionalInteger(input.targetCount) : existing.targetCount,
+      "completedCount" in input ? (cleanOptionalInteger(input.completedCount) ?? 0) : existing.completedCount,
+      "reviewDate" in input ? (cleanOptionalDate(input.reviewDate) || null) : existing.reviewDate,
+      "status" in input ? cleanHealthStatus(input.status) : existing.status,
+      timestamp,
+      id,
+    );
+
+  return getHealthEntry("commitment", id);
+}
+
+function updateHealthLogEntry(type: Exclude<HealthEntryType, "commitment">, id: number, input: Record<string, unknown>, timezone: string) {
+  const existing = getHealthEntry(type, id);
+  if (!existing || existing.type === "commitment") return null;
+
+  const nextType = typeof input.type === "string" ? normalizeHealthEntryType(input.type) : type;
+  if (nextType && nextType !== type && nextType !== "commitment") {
+    const capturedAt = normalizeCapturedAt(input.capturedAt ?? existing.capturedAt);
+    const loggedDate = dateKeyInTimezone(new Date(capturedAt), timezone);
+    const context = {
+      capturedAt,
+      loggedDate,
+      source: "source" in input ? cleanOptionalText(input.source) : (existing.source ?? "console"),
+      rawText: existing.rawText ?? "",
+    };
+    let moved: HealthEntry | null = null;
+    if (nextType === "meal") {
+      moved = insertHealthMeal({ description: cleanOptionalText(input.description) || "Health entry" }, context);
+    } else if (nextType === "workout") {
+      moved = insertHealthWorkout({ description: cleanOptionalText(input.description) || "Health entry" }, context);
+    } else if (nextType === "body") {
+      moved = insertHealthBody({ notes: cleanOptionalText(input.description) || cleanOptionalText(input.notes) || "Health entry" }, context);
+    }
+    if (moved) deleteHealthEntry(type, id);
+    return moved;
+  }
+
+  const capturedAt = normalizeCapturedAt(input.capturedAt ?? existing.capturedAt);
+  const loggedDate =
+    typeof input.loggedDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(input.loggedDate) ? input.loggedDate : dateKeyInTimezone(new Date(capturedAt), timezone);
+  const timestamp = nowIso();
+
+  if (type === "meal") {
+    const meal = existing as HealthMealEntry;
+    healthDb
+      .prepare(
+        `UPDATE health_meals
+         SET captured_at = ?, logged_date = ?, summary = ?, description = ?, meal_type = ?, protein_g_estimate = ?, calories_estimate = ?,
+             hunger = ?, fullness = ?, energy = ?, digestion = ?, gassiness = ?, notes = ?, updated_at = ?
+         WHERE id = ?`,
+      )
+      .run(
+        capturedAt,
+        loggedDate,
+        "summary" in input ? (cleanOptionalText(input.summary) || null) : meal.summary,
+        cleanOptionalText(input.description) || meal.description,
+        "mealType" in input ? (cleanMealType(input.mealType) || null) : meal.mealType,
+        "proteinGEstimate" in input ? cleanOptionalNumber(input.proteinGEstimate) : meal.proteinGEstimate,
+        "caloriesEstimate" in input ? cleanOptionalNumber(input.caloriesEstimate) : meal.caloriesEstimate,
+        "hunger" in input ? cleanScore(input.hunger) : meal.hunger,
+        "fullness" in input ? cleanScore(input.fullness) : meal.fullness,
+        "energy" in input ? cleanScore(input.energy) : meal.energy,
+        "digestion" in input ? cleanScore(input.digestion) : meal.digestion,
+        "gassiness" in input ? cleanScore(input.gassiness) : meal.gassiness,
+        "notes" in input ? (cleanOptionalText(input.notes) || null) : meal.notes,
+        timestamp,
+        id,
+      );
+  }
+
+  if (type === "workout") {
+    const workout = existing as HealthWorkoutEntry;
+    healthDb
+      .prepare(
+        `UPDATE health_workouts
+         SET captured_at = ?, logged_date = ?, summary = ?, workout_type = ?, focus = ?, muscles = ?, description = ?, duration_minutes = ?, intensity = ?,
+             energy_before = ?, energy_after = ?, performance = ?, notes = ?, updated_at = ?
+         WHERE id = ?`,
+      )
+      .run(
+        capturedAt,
+        loggedDate,
+        "summary" in input ? (cleanOptionalText(input.summary) || null) : workout.summary,
+        "workoutType" in input ? (cleanOptionalText(input.workoutType) || null) : workout.workoutType,
+        "focus" in input ? (cleanOptionalText(input.focus) || null) : workout.focus,
+        "muscles" in input ? (cleanOptionalText(input.muscles) || null) : workout.muscles,
+        cleanOptionalText(input.description) || workout.description,
+        "durationMinutes" in input ? cleanOptionalInteger(input.durationMinutes) : workout.durationMinutes,
+        "intensity" in input ? cleanScore(input.intensity) : workout.intensity,
+        "energyBefore" in input ? cleanScore(input.energyBefore) : workout.energyBefore,
+        "energyAfter" in input ? cleanScore(input.energyAfter) : workout.energyAfter,
+        "performance" in input ? cleanScore(input.performance) : workout.performance,
+        "notes" in input ? (cleanOptionalText(input.notes) || null) : workout.notes,
+        timestamp,
+        id,
+      );
+  }
+
+  if (type === "body") {
+    const body = existing as HealthBodyEntry;
+    healthDb
+      .prepare(
+        `UPDATE health_body_logs
+         SET captured_at = ?, logged_date = ?, summary = ?, sleep_hours = ?, sleep_quality = ?, energy = ?, mood_score = ?, soreness = ?,
+             stress = ?, hydration = ?, gassiness = ?, mood = ?, pain = ?, symptoms = ?, weight_lb = ?, notes = ?, updated_at = ?
+         WHERE id = ?`,
+      )
+      .run(
+        capturedAt,
+        loggedDate,
+        "summary" in input ? (cleanOptionalText(input.summary) || null) : body.summary,
+        "sleepHours" in input ? cleanOptionalNumber(input.sleepHours) : body.sleepHours,
+        "sleepQuality" in input ? cleanScore(input.sleepQuality) : body.sleepQuality,
+        "energy" in input ? cleanScore(input.energy) : body.energy,
+        "moodScore" in input ? cleanScore(input.moodScore) : body.moodScore,
+        "soreness" in input ? cleanScore(input.soreness) : body.soreness,
+        "stress" in input ? cleanScore(input.stress) : body.stress,
+        "hydration" in input ? cleanScore(input.hydration) : body.hydration,
+        "gassiness" in input ? cleanScore(input.gassiness) : body.gassiness,
+        "mood" in input ? (cleanOptionalText(input.mood) || null) : body.mood,
+        "pain" in input ? (cleanOptionalText(input.pain) || null) : body.pain,
+        "symptoms" in input ? (cleanOptionalText(input.symptoms) || null) : body.symptoms,
+        "weightLb" in input ? cleanOptionalNumber(input.weightLb) : body.weightLb,
+        "notes" in input ? (cleanOptionalText(input.notes) || null) : body.notes,
+        timestamp,
+        id,
+      );
+  }
+
+  return getHealthEntry(type, id);
+}
+
+function listRecentHealthEntries(limit = 20) {
+  const mealRows = healthDb.prepare("SELECT * FROM health_meals ORDER BY captured_at DESC, id DESC LIMIT ?").all(limit) as Record<string, unknown>[];
+  const workoutRows = healthDb.prepare("SELECT * FROM health_workouts ORDER BY captured_at DESC, id DESC LIMIT ?").all(limit) as Record<string, unknown>[];
+  const bodyRows = healthDb.prepare("SELECT * FROM health_body_logs ORDER BY captured_at DESC, id DESC LIMIT ?").all(limit) as Record<string, unknown>[];
+  const commitmentRows = healthDb.prepare("SELECT * FROM health_commitments ORDER BY created_at DESC, id DESC LIMIT ?").all(limit) as Record<string, unknown>[];
+
+  return [...mealRows.map(mapMeal), ...workoutRows.map(mapWorkout), ...bodyRows.map(mapBody), ...commitmentRows.map(mapCommitment)]
+    .sort((a, b) => {
+      const left = "capturedAt" in a ? a.capturedAt : a.createdAt;
+      const right = "capturedAt" in b ? b.capturedAt : b.createdAt;
+      return right.localeCompare(left);
+    })
+    .slice(0, limit);
+}
+
+function listHealthCommitments() {
+  const rows = healthDb.prepare("SELECT * FROM health_commitments ORDER BY status ASC, review_date IS NULL, review_date ASC, created_at DESC").all() as Record<
+    string,
+    unknown
+  >[];
+  return rows.map(mapCommitment);
+}
+
+function getWeekStartDateKey(now: Date, timezone: string) {
+  const todayKey = dateKeyInTimezone(now, timezone);
+  const today = new Date(`${todayKey}T00:00:00.000Z`);
+  const day = today.getUTCDay();
+  today.setUTCDate(today.getUTCDate() - day);
+  return today.toISOString().slice(0, 10);
+}
+
+function average(values: Array<number | null>) {
+  const numbers = values.filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  if (!numbers.length) return null;
+  return numbers.reduce((sum, value) => sum + value, 0) / numbers.length;
+}
+
+function buildHealthObservations(timezone: string) {
+  const todayKey = dateKeyInTimezone(new Date(), timezone);
+  const start = new Date(`${todayKey}T00:00:00.000Z`);
+  start.setUTCDate(start.getUTCDate() - 6);
+  const startKey = start.toISOString().slice(0, 10);
+  const mealCount = rowRequiredNumber(
+    healthDb.prepare("SELECT COUNT(*) AS count FROM health_meals WHERE logged_date >= ?").get(startKey) as Record<string, unknown>,
+    "count",
+  );
+  const workoutCount = rowRequiredNumber(
+    healthDb.prepare("SELECT COUNT(*) AS count FROM health_workouts WHERE logged_date >= ?").get(startKey) as Record<string, unknown>,
+    "count",
+  );
+  const bodyRows = healthDb.prepare("SELECT sleep_hours, sleep_quality, energy, mood_score, soreness, stress, hydration, gassiness, logged_date FROM health_body_logs WHERE logged_date >= ?").all(startKey) as Record<
+    string,
+    unknown
+  >[];
+  const avgSleep = average(bodyRows.map((row) => rowNumber(row, "sleep_hours")));
+  const avgEnergy = average(bodyRows.map((row) => rowNumber(row, "energy")));
+  const avgMood = average(bodyRows.map((row) => rowNumber(row, "mood_score")));
+  const avgSoreness = average(bodyRows.map((row) => rowNumber(row, "soreness")));
+  const avgStress = average(bodyRows.map((row) => rowNumber(row, "stress")));
+  const avgGassiness = average(bodyRows.map((row) => rowNumber(row, "gassiness")));
+  const observations = [`Last 7 days: ${mealCount} meal logs, ${workoutCount} workout logs, ${bodyRows.length} body check-ins.`];
+
+  if (avgSleep !== null) observations.push(`Average logged sleep is ${avgSleep.toFixed(1)} hours.`);
+  if (avgEnergy !== null) observations.push(`Average logged energy is ${avgEnergy.toFixed(1)}/5.`);
+  if (avgMood !== null || avgStress !== null || avgSoreness !== null || avgGassiness !== null) {
+    observations.push(
+      [
+        avgMood === null ? null : `mood ${avgMood.toFixed(1)}/5`,
+        avgStress === null ? null : `stress ${avgStress.toFixed(1)}/5`,
+        avgSoreness === null ? null : `soreness ${avgSoreness.toFixed(1)}/5`,
+        avgGassiness === null ? null : `gassiness ${avgGassiness.toFixed(1)}/5`,
+      ]
+        .filter(Boolean)
+        .join(", "),
+    );
+  }
+
+  const workoutDates = new Set(
+    (healthDb.prepare("SELECT DISTINCT logged_date FROM health_workouts WHERE logged_date >= ?").all(startKey) as Record<string, unknown>[])
+      .map((row) => rowText(row, "logged_date"))
+      .filter(Boolean),
+  );
+  const bodyOnWorkoutDays = bodyRows.filter((row) => workoutDates.has(rowRequiredText(row, "logged_date")));
+  const restedWorkoutEnergy = average(bodyOnWorkoutDays.filter((row) => (rowNumber(row, "sleep_hours") ?? 0) >= 7).map((row) => rowNumber(row, "energy")));
+  const otherWorkoutEnergy = average(bodyOnWorkoutDays.filter((row) => (rowNumber(row, "sleep_hours") ?? 0) < 7).map((row) => rowNumber(row, "energy")));
+  if (restedWorkoutEnergy !== null && otherWorkoutEnergy !== null) {
+    observations.push(`Workout days with 7h+ sleep averaged ${restedWorkoutEnergy.toFixed(1)}/5 energy versus ${otherWorkoutEnergy.toFixed(1)}/5 otherwise.`);
+  }
+
+  return observations;
+}
+
+function getHealthOverview(timezone: string) {
+  const today = dateKeyInTimezone(new Date(), timezone);
+  const meals = healthDb.prepare("SELECT * FROM health_meals WHERE logged_date = ? ORDER BY captured_at DESC, id DESC").all(today) as Record<string, unknown>[];
+  const workouts = healthDb.prepare("SELECT * FROM health_workouts WHERE logged_date = ? ORDER BY captured_at DESC, id DESC").all(today) as Record<
+    string,
+    unknown
+  >[];
+  const bodyLogs = healthDb.prepare("SELECT * FROM health_body_logs WHERE logged_date = ? ORDER BY captured_at DESC, id DESC").all(today) as Record<
+    string,
+    unknown
+  >[];
+  const commitments = listHealthCommitments();
+  const activeCommitments = commitments.filter((commitment) => commitment.status === "active");
+  const dueCommitments = activeCommitments.filter((commitment) => commitment.reviewDate !== null && commitment.reviewDate <= today);
+  const mealEntries = meals.map(mapMeal);
+  const workoutEntries = workouts.map(mapWorkout);
+  const bodyEntries = bodyLogs.map(mapBody);
+  const latestBody = bodyEntries[0] ?? null;
+
+  return {
+    generatedAt: nowIso(),
+    today: {
+      date: today,
+      meals: {
+        count: mealEntries.length,
+        proteinGEstimate: average(mealEntries.map((entry) => entry.proteinGEstimate === null ? null : entry.proteinGEstimate)) === null
+          ? null
+          : mealEntries.reduce((sum, entry) => sum + (entry.proteinGEstimate ?? 0), 0),
+        caloriesEstimate: average(mealEntries.map((entry) => entry.caloriesEstimate === null ? null : entry.caloriesEstimate)) === null
+          ? null
+          : mealEntries.reduce((sum, entry) => sum + (entry.caloriesEstimate ?? 0), 0),
+        lastDescription: mealEntries[0]?.description ?? null,
+      },
+      workouts: {
+        count: workoutEntries.length,
+        durationMinutes: workoutEntries.reduce((sum, entry) => sum + (entry.durationMinutes ?? 0), 0) || null,
+        averageIntensity: average(workoutEntries.map((entry) => entry.intensity)),
+        lastDescription: workoutEntries[0]?.description ?? null,
+      },
+      body: {
+        count: bodyEntries.length,
+        sleepHours: latestBody?.sleepHours ?? null,
+        sleepQuality: latestBody?.sleepQuality ?? null,
+        energy: latestBody?.energy ?? null,
+        moodScore: latestBody?.moodScore ?? null,
+        soreness: latestBody?.soreness ?? null,
+        stress: latestBody?.stress ?? null,
+        hydration: latestBody?.hydration ?? null,
+        gassiness: latestBody?.gassiness ?? null,
+        mood: latestBody?.mood ?? null,
+        pain: latestBody?.pain ?? null,
+        symptoms: latestBody?.symptoms ?? null,
+      },
+      commitments: {
+        activeCount: activeCommitments.length,
+        dueCount: dueCommitments.length,
+        next: activeCommitments[0] ?? null,
+      },
+    },
+    insights: buildHealthObservations(timezone),
+    commitments: activeCommitments.slice(0, 6),
+    recent: listRecentHealthEntries(8),
+  };
+}
+
+function buildHealthIntakePrompt(input: { text: string; source: string; timezone: string }) {
+  return [
+    "You are the health intake parser for Vishal.ai, a private personal operating system.",
+    "Turn messy voice or text updates into loose health logs. Return only JSON that matches the schema.",
+    "",
+    "Routes:",
+    "- meal: food, drinks, snacks, appetite, digestion around eating.",
+    "- workout: lifting, cardio, sports, mobility, training, effort, muscles trained.",
+    "- body: sleep, sleep quality, energy, mood, stress, soreness, hydration, gassiness, pain, symptoms without diagnosis.",
+    "- commitment: weekly consistency choices or promises.",
+    "- mixed: more than one category appears.",
+    "",
+    "Rules:",
+    "- Keep descriptions faithful and concise.",
+    "- summary: one short neutral summary for each entry when useful.",
+    "- notes: side context, caveats, possible relationships stated by the user, and details that should not be lost.",
+    "- Preserve user-stated relationships without diagnosing them; e.g. knee tightness because hips felt tight.",
+    "- Estimates are optional and should be null or omitted when uncertain.",
+    "- Scores are 1-5 where 1 is low and 5 is high.",
+    "- Do not moralize food, diagnose, prescribe treatment, or use rigid diet language.",
+    "- If a category is absent, return an empty array for it.",
+    "- confirmation should be one short human-readable sentence.",
+    "",
+    `Current server timestamp: ${new Date().toISOString()}`,
+    `User timezone: ${input.timezone}`,
+    `Capture source: ${input.source}`,
+    "",
+    "Captured text:",
+    input.text,
+  ].join("\n");
+}
+
+function stripJsonFence(text: string) {
+  return text
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+}
+
+function normalizeHealthDrafts(parsed: Record<string, unknown>): ParsedHealthIntake {
+  const route = typeof parsed.route === "string" && ["meal", "workout", "body", "commitment", "mixed"].includes(parsed.route)
+    ? (parsed.route as HealthRouteType)
+    : "mixed";
+
+  const meals = Array.isArray(parsed.meals)
+    ? parsed.meals
+        .filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null && typeof item.description === "string" && item.description.trim().length > 0)
+        .map((item) => ({
+          caloriesEstimate: cleanOptionalNumber(item.caloriesEstimate),
+          description: cleanOptionalText(item.description),
+          digestion: cleanScore(item.digestion),
+          energy: cleanScore(item.energy),
+          fullness: cleanScore(item.fullness),
+          gassiness: cleanScore(item.gassiness),
+          hunger: cleanScore(item.hunger),
+          mealType: cleanMealType(item.mealType),
+          notes: cleanOptionalText(item.notes),
+          proteinGEstimate: cleanOptionalNumber(item.proteinGEstimate),
+          summary: cleanOptionalText(item.summary),
+        }))
+    : [];
+
+  const workouts = Array.isArray(parsed.workouts)
+    ? parsed.workouts
+        .filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null && typeof item.description === "string" && item.description.trim().length > 0)
+        .map((item) => ({
+          description: cleanOptionalText(item.description),
+          durationMinutes: cleanOptionalInteger(item.durationMinutes),
+          energyAfter: cleanScore(item.energyAfter),
+          energyBefore: cleanScore(item.energyBefore),
+          focus: cleanOptionalText(item.focus),
+          intensity: cleanScore(item.intensity),
+          muscles: cleanOptionalText(item.muscles),
+          notes: cleanOptionalText(item.notes),
+          performance: cleanScore(item.performance),
+          summary: cleanOptionalText(item.summary),
+          workoutType: cleanOptionalText(item.workoutType),
+        }))
+    : [];
+
+  const bodyLogs = Array.isArray(parsed.bodyLogs)
+    ? parsed.bodyLogs
+        .filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null)
+        .map((item) => ({
+          energy: cleanScore(item.energy),
+          gassiness: cleanScore(item.gassiness),
+          hydration: cleanScore(item.hydration),
+          mood: cleanOptionalText(item.mood),
+          moodScore: cleanScore(item.moodScore),
+          notes: cleanOptionalText(item.notes),
+          pain: cleanOptionalText(item.pain),
+          sleepHours: cleanOptionalNumber(item.sleepHours),
+          sleepQuality: cleanScore(item.sleepQuality),
+          soreness: cleanScore(item.soreness),
+          stress: cleanScore(item.stress),
+          symptoms: cleanOptionalText(item.symptoms),
+          summary: cleanOptionalText(item.summary),
+          weightLb: cleanOptionalNumber(item.weightLb),
+        }))
+        .filter(
+          (item) =>
+            item.sleepHours !== null ||
+            item.sleepQuality !== null ||
+            item.energy !== null ||
+            item.moodScore !== null ||
+            item.soreness !== null ||
+            item.stress !== null ||
+            item.hydration !== null ||
+            item.gassiness !== null ||
+            item.mood ||
+            item.pain ||
+            item.symptoms ||
+            item.weightLb !== null ||
+            item.notes,
+        )
+    : [];
+
+  const commitments = Array.isArray(parsed.commitments)
+    ? parsed.commitments
+        .filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null && typeof item.title === "string" && item.title.trim().length > 0)
+        .map((item) => ({
+          cadence: cleanCadence(item.cadence),
+          completedCount: cleanOptionalInteger(item.completedCount),
+          description: cleanOptionalText(item.description),
+          reviewDate: cleanOptionalDate(item.reviewDate),
+          status: cleanHealthStatus(item.status),
+          targetCount: cleanOptionalInteger(item.targetCount),
+          title: cleanOptionalText(item.title),
+        }))
+    : [];
+
+  if (!meals.length && !workouts.length && !bodyLogs.length && !commitments.length) {
+    throw Object.assign(new Error("Gemini returned no health entries"), { statusCode: 502 });
+  }
+
+  const confirmation = cleanOptionalText(parsed.confirmation) || "Health update captured.";
+  return { route, confirmation, meals, workouts, bodyLogs, commitments };
+}
+
+function parseGeminiHealth(text: string): ParsedHealthIntake {
+  const parsed = JSON.parse(stripJsonFence(text)) as Record<string, unknown>;
+  return normalizeHealthDrafts(parsed);
+}
+
+async function parseHealthWithGemini(input: { text: string; source: string; timezone: string }) {
+  if (!geminiApiKey.trim()) {
+    throw Object.assign(new Error("GEMINI_API_KEY is not configured"), { statusCode: 503 });
+  }
+
+  const apiUrl = new URL(`https://generativelanguage.googleapis.com/v1beta/models/${geminiHealthModel}:generateContent`);
+  apiUrl.searchParams.set("key", geminiApiKey);
+
+  const response = await fetch(apiUrl, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    signal: AbortSignal.timeout(12000),
+    body: JSON.stringify({
+      contents: [
+        {
+          parts: [{ text: buildHealthIntakePrompt(input) }],
+        },
+      ],
+      generationConfig: {
+        temperature: 0.1,
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: "OBJECT",
+          properties: {
+            route: { type: "STRING", enum: ["meal", "workout", "body", "commitment", "mixed"] },
+            confirmation: { type: "STRING" },
+            meals: {
+              type: "ARRAY",
+              items: {
+                type: "OBJECT",
+                properties: {
+                  summary: { type: "STRING" },
+                  description: { type: "STRING" },
+                  mealType: { type: "STRING" },
+                  proteinGEstimate: { type: "NUMBER" },
+                  caloriesEstimate: { type: "NUMBER" },
+                  hunger: { type: "INTEGER" },
+                  fullness: { type: "INTEGER" },
+                  energy: { type: "INTEGER" },
+                  digestion: { type: "INTEGER" },
+                  gassiness: { type: "INTEGER" },
+                  notes: { type: "STRING" },
+                },
+                required: ["description"],
+              },
+            },
+            workouts: {
+              type: "ARRAY",
+              items: {
+                type: "OBJECT",
+                properties: {
+                  summary: { type: "STRING" },
+                  workoutType: { type: "STRING" },
+                  focus: { type: "STRING" },
+                  muscles: { type: "STRING" },
+                  description: { type: "STRING" },
+                  durationMinutes: { type: "INTEGER" },
+                  intensity: { type: "INTEGER" },
+                  energyBefore: { type: "INTEGER" },
+                  energyAfter: { type: "INTEGER" },
+                  performance: { type: "INTEGER" },
+                  notes: { type: "STRING" },
+                },
+                required: ["description"],
+              },
+            },
+            bodyLogs: {
+              type: "ARRAY",
+              items: {
+                type: "OBJECT",
+                properties: {
+                  summary: { type: "STRING" },
+                  sleepHours: { type: "NUMBER" },
+                  sleepQuality: { type: "INTEGER" },
+                  energy: { type: "INTEGER" },
+                  moodScore: { type: "INTEGER" },
+                  soreness: { type: "INTEGER" },
+                  stress: { type: "INTEGER" },
+                  hydration: { type: "INTEGER" },
+                  gassiness: { type: "INTEGER" },
+                  mood: { type: "STRING" },
+                  pain: { type: "STRING" },
+                  symptoms: { type: "STRING" },
+                  weightLb: { type: "NUMBER" },
+                  notes: { type: "STRING" },
+                },
+              },
+            },
+            commitments: {
+              type: "ARRAY",
+              items: {
+                type: "OBJECT",
+                properties: {
+                  title: { type: "STRING" },
+                  description: { type: "STRING" },
+                  cadence: { type: "STRING" },
+                  targetCount: { type: "INTEGER" },
+                  completedCount: { type: "INTEGER" },
+                  reviewDate: { type: "STRING" },
+                  status: { type: "STRING", enum: ["active", "paused", "done"] },
+                },
+                required: ["title"],
+              },
+            },
+          },
+          required: ["route", "confirmation", "meals", "workouts", "bodyLogs", "commitments"],
+        },
+      },
+    }),
+  });
+
+  const payload = (await response.json()) as GeminiJsonResponse;
+  if (!response.ok) {
+    throw Object.assign(new Error(payload.error?.message ?? `Gemini health parser returned ${response.status}`), { statusCode: 502 });
+  }
+
+  const text = payload.candidates?.[0]?.content?.parts?.find((part) => typeof part.text === "string")?.text;
+  if (!text) {
+    throw Object.assign(new Error("Gemini returned no health JSON"), { statusCode: 502 });
+  }
+
+  return parseGeminiHealth(text);
+}
+
+function writeParsedHealthIntake(parsed: ParsedHealthIntake, context: { capturedAt: string; loggedDate: string; source: string; rawText: string }) {
+  const created: HealthEntry[] = [];
+  for (const meal of parsed.meals) {
+    const entry = insertHealthMeal(meal, context);
+    if (entry) created.push(entry);
+  }
+  for (const workout of parsed.workouts) {
+    const entry = insertHealthWorkout(workout, context);
+    if (entry) created.push(entry);
+  }
+  for (const bodyLog of parsed.bodyLogs) {
+    const entry = insertHealthBody(bodyLog, context);
+    if (entry) created.push(entry);
+  }
+  for (const commitment of parsed.commitments) {
+    const entry = insertHealthCommitment(commitment);
+    if (entry) created.push(entry);
+  }
+  return created;
+}
+
+async function intakeHealth(req: IncomingMessage, res: ServerResponse, options: { requireBearerToken: boolean }) {
+  if (options.requireBearerToken && !hasValidIntakeToken(req)) {
+    sendJson(res, 401, { error: "Valid intake bearer token required" });
+    return;
+  }
+
+  const body = await readJsonBody(req);
+  if (typeof body !== "object" || body === null || typeof (body as { text?: unknown }).text !== "string") {
+    sendJson(res, 400, { error: "Expected JSON body with a text string" });
+    return;
+  }
+
+  const text = (body as { text: string }).text.trim();
+  if (!text) {
+    sendJson(res, 400, { error: "Health intake text cannot be empty" });
+    return;
+  }
+
+  const source = cleanOptionalText((body as { source?: unknown }).source) || (options.requireBearerToken ? "voice" : "console");
+  const timezone = cleanOptionalText((body as { timezone?: unknown }).timezone) || "America/New_York";
+  const capturedAt = normalizeCapturedAt((body as { capturedAt?: unknown }).capturedAt);
+  const loggedDate = dateKeyInTimezone(new Date(capturedAt), timezone);
+  const parsed = await parseHealthWithGemini({ text, source, timezone });
+  const entries = writeParsedHealthIntake(parsed, { capturedAt, loggedDate, source, rawText: text });
+
+  sendJson(res, 201, {
+    confirmation: parsed.confirmation,
+    entries,
+    route: parsed.route,
+  });
+}
+
+async function routeHealthApi(req: IncomingMessage, res: ServerResponse, url: URL) {
+  const timezone = url.searchParams.get("timezone") ?? "America/New_York";
+
+  if (url.pathname === "/api/health/overview" && req.method === "GET") {
+    sendJson(res, 200, getHealthOverview(timezone));
+    return true;
+  }
+
+  if (url.pathname === "/api/health/recent" && req.method === "GET") {
+    const limit = Math.min(50, Math.max(1, Number(url.searchParams.get("limit") ?? 20)));
+    sendJson(res, 200, { entries: listRecentHealthEntries(limit) });
+    return true;
+  }
+
+  if (url.pathname === "/api/health/commitments" && req.method === "GET") {
+    sendJson(res, 200, { commitments: listHealthCommitments() });
+    return true;
+  }
+
+  if (url.pathname === "/api/health/commitments" && req.method === "POST") {
+    const body = await readJsonBody(req);
+    if (typeof body !== "object" || body === null) {
+      sendJson(res, 400, { error: "Expected JSON body" });
+      return true;
+    }
+    const commitment = insertHealthCommitment(body as HealthCommitmentDraft);
+    sendJson(res, 201, { commitment });
+    return true;
+  }
+
+  const commitmentMatch = url.pathname.match(/^\/api\/health\/commitments\/(\d+)$/);
+  if (commitmentMatch && req.method === "PUT") {
+    const body = await readJsonBody(req);
+    if (typeof body !== "object" || body === null) {
+      sendJson(res, 400, { error: "Expected JSON body" });
+      return true;
+    }
+    const commitment = updateHealthCommitment(Number(commitmentMatch[1]), body as Record<string, unknown>);
+    if (!commitment) {
+      sendJson(res, 404, { error: "Commitment not found" });
+      return true;
+    }
+    sendJson(res, 200, { commitment });
+    return true;
+  }
+
+  const entryMatch = url.pathname.match(/^\/api\/health\/entries\/([^/]+)\/(\d+)$/);
+  if (entryMatch && req.method === "PUT") {
+    const type = normalizeHealthEntryType(entryMatch[1]);
+    if (!type) {
+      sendJson(res, 400, { error: "Unsupported health entry type" });
+      return true;
+    }
+    const body = await readJsonBody(req);
+    if (typeof body !== "object" || body === null) {
+      sendJson(res, 400, { error: "Expected JSON body" });
+      return true;
+    }
+    const id = Number(entryMatch[2]);
+    const entry = type === "commitment" ? updateHealthCommitment(id, body as Record<string, unknown>) : updateHealthLogEntry(type, id, body as Record<string, unknown>, timezone);
+    if (!entry) {
+      sendJson(res, 404, { error: "Health entry not found" });
+      return true;
+    }
+    sendJson(res, 200, { entry });
+    return true;
+  }
+
+  if (entryMatch && req.method === "DELETE") {
+    const type = normalizeHealthEntryType(entryMatch[1]);
+    if (!type) {
+      sendJson(res, 400, { error: "Unsupported health entry type" });
+      return true;
+    }
+    const deleted = deleteHealthEntry(type, Number(entryMatch[2]));
+    if (!deleted) {
+      sendJson(res, 404, { error: "Health entry not found" });
+      return true;
+    }
+    sendJson(res, 200, { deleted: true });
+    return true;
+  }
+
+  return false;
+}
+
 function asNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
@@ -1009,12 +2339,26 @@ async function route(req: IncomingMessage, res: ServerResponse) {
     return;
   }
 
+  if (url.pathname === "/api/intake/health" && req.method === "POST") {
+    await intakeHealth(req, res, { requireBearerToken: true });
+    return;
+  }
+
   if (
     isAuthEnabled() &&
     !isAuthenticated(req) &&
     (url.pathname.startsWith("/api/") || (url.pathname.startsWith("/health/") && url.pathname !== "/health/console"))
   ) {
     sendJson(res, 401, { error: "Authentication required" });
+    return;
+  }
+
+  if (url.pathname === "/api/health/capture" && req.method === "POST") {
+    await intakeHealth(req, res, { requireBearerToken: false });
+    return;
+  }
+
+  if (url.pathname.startsWith("/api/health/") && (await routeHealthApi(req, res, url))) {
     return;
   }
 
@@ -1082,4 +2426,5 @@ const server = createServer((req, res) => {
 server.listen(port, host, () => {
   console.log(`brain console listening on ${host}:${port}`);
   console.log(`vault root: ${vaultRoot}`);
+  console.log(`health db: ${healthDbPath}`);
 });
