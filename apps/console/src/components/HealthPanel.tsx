@@ -1,660 +1,265 @@
-import { Activity, Dumbbell, HeartPulse, LoaderCircle, Mic, Pencil, Plus, RefreshCw, Send, Trash2, Utensils, X } from "lucide-react";
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { captureHealth, createHealthCommitment, deleteHealthEntry, loadHealthOverview, updateHealthEntry } from "../lib/healthData";
-import type { HealthCommitmentEntry, HealthEntry, HealthEntryType, HealthOverview } from "../types";
+import { LoaderCircle, RefreshCw } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type HealthSeriesPoint, loadHealthRhythm, loadHealthSeries } from "../lib/healthData";
 
-type SpeechRecognitionResultLike = {
-  isFinal: boolean;
-  0: {
-    transcript: string;
-  };
+type Range = 7 | 30 | 90;
+
+type MetricKey =
+  | "sleepHours"
+  | "energy"
+  | "mood"
+  | "stress"
+  | "soreness"
+  | "protein"
+  | "workoutMinutes"
+  | "weight";
+
+type MetricSpec = {
+  key: MetricKey;
+  label: string;
+  unit: string;
+  precision: 0 | 1;
+  color: string;
+  glow: string;
 };
 
-type SpeechRecognitionEventLike = {
-  results: ArrayLike<SpeechRecognitionResultLike>;
-};
+const METRICS: MetricSpec[] = [
+  { key: "sleepHours", label: "Sleep", unit: "h", precision: 1, color: "var(--teal)", glow: "rgba(49, 115, 129, 0.35)" },
+  { key: "energy", label: "Energy", unit: "/5", precision: 1, color: "var(--olive)", glow: "rgba(112, 115, 92, 0.35)" },
+  { key: "mood", label: "Mood", unit: "/5", precision: 1, color: "var(--orange)", glow: "rgba(210, 105, 30, 0.35)" },
+  { key: "stress", label: "Stress", unit: "/5", precision: 1, color: "var(--red)", glow: "rgba(184, 68, 67, 0.35)" },
+  { key: "soreness", label: "Soreness", unit: "/5", precision: 1, color: "var(--mist)", glow: "rgba(195, 200, 199, 0.45)" },
+  { key: "protein", label: "Protein", unit: "g", precision: 0, color: "var(--olive)", glow: "rgba(112, 115, 92, 0.35)" },
+  { key: "workoutMinutes", label: "Training", unit: "m", precision: 0, color: "var(--teal)", glow: "rgba(49, 115, 129, 0.35)" },
+  { key: "weight", label: "Weight", unit: "lb", precision: 1, color: "var(--mist)", glow: "rgba(195, 200, 199, 0.45)" },
+];
 
-type SpeechRecognitionLike = {
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  onend: (() => void) | null;
-  onerror: ((event: { error?: string }) => void) | null;
-  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
-  start: () => void;
-  stop: () => void;
-};
-
-type WindowWithSpeech = Window & {
-  SpeechRecognition?: new () => SpeechRecognitionLike;
-  webkitSpeechRecognition?: new () => SpeechRecognitionLike;
-};
-
-type EntryDraft = {
-  type: HealthEntryType;
-  capturedAt: string;
-  title: string;
-  summary: string;
-  description: string;
-  mealType: string;
-  proteinGEstimate: string;
-  caloriesEstimate: string;
-  hunger: string;
-  fullness: string;
-  energy: string;
-  digestion: string;
-  gassiness: string;
-  workoutType: string;
-  focus: string;
-  muscles: string;
-  durationMinutes: string;
-  intensity: string;
-  energyBefore: string;
-  energyAfter: string;
-  performance: string;
-  sleepHours: string;
-  sleepQuality: string;
-  soreness: string;
-  moodScore: string;
-  stress: string;
-  hydration: string;
-  mood: string;
-  pain: string;
-  symptoms: string;
-  weightLb: string;
-  notes: string;
-  cadence: string;
-  targetCount: string;
-  completedCount: string;
-  reviewDate: string;
-  status: string;
-};
-
-function formatNumber(value: number | null, suffix = "") {
-  if (value === null) return "--";
-  return `${Number.isInteger(value) ? value : value.toFixed(1)}${suffix}`;
+function pickValue(point: HealthSeriesPoint, key: MetricKey): number | null {
+  return point[key];
 }
 
-function compactNumber(value: number | null) {
-  if (value === null) return "--";
-  return new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(value);
+function formatValue(value: number | null, precision: 0 | 1) {
+  if (value === null) return "—";
+  return precision === 0 ? Math.round(value).toString() : value.toFixed(1);
 }
 
-function formatDateTime(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Recent";
-  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(date);
-}
-
-function toDateTimeLocal(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  const offsetMs = date.getTimezoneOffset() * 60_000;
-  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
-}
-
-function fromDateTimeLocal(value: string) {
-  if (!value) return undefined;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
-}
-
-function numberOrNull(value: string) {
-  if (!value.trim()) return null;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function entryLabel(entry: HealthEntry) {
-  if (entry.type === "commitment") return entry.title;
-  if (entry.type === "body") return entry.summary || entry.notes || "Body check-in";
-  if (entry.summary) return entry.summary;
-  return entry.description;
-}
-
-function entryMeta(entry: HealthEntry) {
-  if (entry.type === "commitment") {
-    return [entry.cadence, entry.reviewDate ? `review ${entry.reviewDate}` : null, entry.status].filter(Boolean).join(" / ");
+function lastNonNull(series: HealthSeriesPoint[], key: MetricKey): number | null {
+  for (let i = series.length - 1; i >= 0; i -= 1) {
+    const value = pickValue(series[i], key);
+    if (value !== null) return value;
   }
-  return [formatDateTime(entry.capturedAt), entry.source].filter(Boolean).join(" / ");
+  return null;
 }
 
-function draftFromEntry(entry: HealthEntry): EntryDraft {
-  const base = {
-    caloriesEstimate: "",
-    cadence: "",
-    capturedAt: "capturedAt" in entry ? toDateTimeLocal(entry.capturedAt) : "",
-    completedCount: "",
-    description: "",
-    digestion: "",
-    durationMinutes: "",
-    energy: "",
-    energyAfter: "",
-    energyBefore: "",
-    focus: "",
-    fullness: "",
-    gassiness: "",
-    hunger: "",
-    hydration: "",
-    intensity: "",
-    mealType: "",
-    mood: "",
-    moodScore: "",
-    muscles: "",
-    notes: "",
-    pain: "",
-    performance: "",
-    proteinGEstimate: "",
-    reviewDate: "",
-    sleepHours: "",
-    sleepQuality: "",
-    soreness: "",
-    status: "",
-    summary: "",
-    stress: "",
-    symptoms: "",
-    targetCount: "",
-    title: "",
-    type: entry.type,
-    weightLb: "",
-    workoutType: "",
-  };
-
-  if (entry.type === "meal") {
-    return {
-      ...base,
-      caloriesEstimate: entry.caloriesEstimate?.toString() ?? "",
-      description: entry.description,
-      summary: entry.summary ?? "",
-      digestion: entry.digestion?.toString() ?? "",
-      energy: entry.energy?.toString() ?? "",
-      fullness: entry.fullness?.toString() ?? "",
-      gassiness: entry.gassiness?.toString() ?? "",
-      hunger: entry.hunger?.toString() ?? "",
-      mealType: entry.mealType ?? "",
-      notes: entry.notes ?? "",
-      proteinGEstimate: entry.proteinGEstimate?.toString() ?? "",
-    };
-  }
-
-  if (entry.type === "workout") {
-    return {
-      ...base,
-      description: entry.description,
-      summary: entry.summary ?? "",
-      durationMinutes: entry.durationMinutes?.toString() ?? "",
-      energyAfter: entry.energyAfter?.toString() ?? "",
-      energyBefore: entry.energyBefore?.toString() ?? "",
-      focus: entry.focus ?? "",
-      intensity: entry.intensity?.toString() ?? "",
-      muscles: entry.muscles ?? "",
-      notes: entry.notes ?? "",
-      performance: entry.performance?.toString() ?? "",
-      workoutType: entry.workoutType ?? "",
-    };
-  }
-
-  if (entry.type === "body") {
-    return {
-      ...base,
-      energy: entry.energy?.toString() ?? "",
-      summary: entry.summary ?? "",
-      gassiness: entry.gassiness?.toString() ?? "",
-      hydration: entry.hydration?.toString() ?? "",
-      mood: entry.mood ?? "",
-      moodScore: entry.moodScore?.toString() ?? "",
-      notes: entry.notes ?? "",
-      pain: entry.pain ?? "",
-      sleepHours: entry.sleepHours?.toString() ?? "",
-      sleepQuality: entry.sleepQuality?.toString() ?? "",
-      soreness: entry.soreness?.toString() ?? "",
-      stress: entry.stress?.toString() ?? "",
-      symptoms: entry.symptoms ?? "",
-      weightLb: entry.weightLb?.toString() ?? "",
-    };
-  }
-
-  return {
-    ...base,
-    cadence: entry.cadence,
-    completedCount: entry.completedCount.toString(),
-    description: entry.description ?? "",
-    reviewDate: entry.reviewDate ?? "",
-    status: entry.status,
-    targetCount: entry.targetCount?.toString() ?? "",
-    title: entry.title,
-  };
+function average(values: number[]) {
+  if (!values.length) return null;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
-function payloadFromDraft(draft: EntryDraft) {
-  if (draft.type === "commitment") {
-    return {
-      cadence: draft.cadence,
-      completedCount: numberOrNull(draft.completedCount),
-      description: draft.description,
-      reviewDate: draft.reviewDate,
-      status: draft.status,
-      targetCount: numberOrNull(draft.targetCount),
-      title: draft.title,
-      type: draft.type,
-    };
-  }
-
-  const base = {
-    capturedAt: fromDateTimeLocal(draft.capturedAt),
-    description: draft.description,
-    notes: draft.notes,
-    summary: draft.summary,
-    type: draft.type,
-  };
-
-  if (draft.type === "meal") {
-    return {
-      ...base,
-      caloriesEstimate: numberOrNull(draft.caloriesEstimate),
-      digestion: numberOrNull(draft.digestion),
-      energy: numberOrNull(draft.energy),
-      fullness: numberOrNull(draft.fullness),
-      gassiness: numberOrNull(draft.gassiness),
-      hunger: numberOrNull(draft.hunger),
-      mealType: draft.mealType,
-      proteinGEstimate: numberOrNull(draft.proteinGEstimate),
-    };
-  }
-
-  if (draft.type === "workout") {
-    return {
-      ...base,
-      durationMinutes: numberOrNull(draft.durationMinutes),
-      energyAfter: numberOrNull(draft.energyAfter),
-      energyBefore: numberOrNull(draft.energyBefore),
-      focus: draft.focus,
-      intensity: numberOrNull(draft.intensity),
-      muscles: draft.muscles,
-      performance: numberOrNull(draft.performance),
-      workoutType: draft.workoutType,
-    };
-  }
-
-  return {
-    ...base,
-    energy: numberOrNull(draft.energy),
-    gassiness: numberOrNull(draft.gassiness),
-    hydration: numberOrNull(draft.hydration),
-    mood: draft.mood,
-    moodScore: numberOrNull(draft.moodScore),
-    pain: draft.pain,
-    sleepHours: numberOrNull(draft.sleepHours),
-    sleepQuality: numberOrNull(draft.sleepQuality),
-    soreness: numberOrNull(draft.soreness),
-    stress: numberOrNull(draft.stress),
-    symptoms: draft.symptoms,
-    weightLb: numberOrNull(draft.weightLb),
-  };
+function deltaPercent(series: HealthSeriesPoint[], key: MetricKey) {
+  const values = series.map((point) => pickValue(point, key)).filter((value): value is number => value !== null);
+  if (values.length < 4) return null;
+  const half = Math.floor(values.length / 2);
+  const prev = average(values.slice(0, half));
+  const next = average(values.slice(half));
+  if (prev === null || next === null || prev === 0) return null;
+  return ((next - prev) / Math.abs(prev)) * 100;
 }
 
-function HealthEntryIcon({ type }: { type: HealthEntryType }) {
-  if (type === "meal") return <Utensils size={16} />;
-  if (type === "workout") return <Dumbbell size={16} />;
-  if (type === "body") return <HeartPulse size={16} />;
-  return <Activity size={16} />;
+function buildPoints(series: HealthSeriesPoint[], key: MetricKey, width: number, height: number, padX: number, padY: number) {
+  const values = series.map((point) => pickValue(point, key));
+  const nonNull = values.filter((v): v is number => v !== null);
+  if (nonNull.length < 2) return null;
+  const min = Math.min(...nonNull);
+  const max = Math.max(...nonNull);
+  const span = max - min || 1;
+  const stepX = (width - padX * 2) / Math.max(1, values.length - 1);
+  return values.map((value, index) => {
+    if (value === null) return null;
+    const x = padX + index * stepX;
+    const y = height - padY - ((value - min) / span) * (height - padY * 2);
+    return { x, y };
+  });
 }
 
-function HealthEntryCard({ entry, onChanged }: { entry: HealthEntry; onChanged: () => Promise<void> }) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState<EntryDraft>(() => draftFromEntry(entry));
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setDraft(draftFromEntry(entry));
-    setEditing(false);
-    setError(null);
-  }, [entry]);
-
-  async function save() {
-    setSaving(true);
-    setError(null);
-    try {
-      await updateHealthEntry(entry.type, entry.id, payloadFromDraft(draft));
-      await onChanged();
-      setEditing(false);
-    } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Could not update entry");
-    } finally {
-      setSaving(false);
+function segmentsFrom(points: Array<{ x: number; y: number } | null>) {
+  const out: Array<Array<{ x: number; y: number }>> = [];
+  let current: Array<{ x: number; y: number }> = [];
+  for (const point of points) {
+    if (point === null) {
+      if (current.length > 1) out.push(current);
+      current = [];
+    } else {
+      current.push(point);
     }
   }
+  if (current.length > 1) out.push(current);
+  return out;
+}
 
-  async function remove() {
-    if (!window.confirm("Delete this health entry?")) return;
-    setSaving(true);
-    setError(null);
-    try {
-      await deleteHealthEntry(entry.type, entry.id);
-      await onChanged();
-    } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Could not delete entry");
-    } finally {
-      setSaving(false);
-    }
+function pathFrom(pts: Array<{ x: number; y: number }>) {
+  return pts.map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(" ");
+}
+
+function formatHoverDate(dateStr: string) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(new Date(y, m - 1, d));
+}
+
+function BigChart({ series, metric }: { series: HealthSeriesPoint[]; metric: MetricSpec }) {
+  const width = 1000;
+  const height = 320;
+  const padX = 16;
+  const padY = 28;
+
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+
+  const points = buildPoints(series, metric.key, width, height, padX, padY);
+
+  if (!points) {
+    return (
+      <div className="big-chart-empty">
+        <span>Not enough data yet</span>
+      </div>
+    );
   }
 
-  const isLog = entry.type !== "commitment";
+  const safePoints = points;
+  const segs = segmentsFrom(safePoints);
+  const lastPoint = [...safePoints].reverse().find((p): p is { x: number; y: number } => p !== null);
+  const values = series.map((p) => pickValue(p, metric.key)).filter((v): v is number => v !== null);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const gradientId = `big-spark-${metric.key}`;
+
+  const areaFrom = (pts: Array<{ x: number; y: number }>) =>
+    `${pathFrom(pts)} L${pts[pts.length - 1].x.toFixed(2)},${height} L${pts[0].x.toFixed(2)},${height} Z`;
+
+  function handleMove(event: React.MouseEvent<SVGSVGElement>) {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const rect = svg.getBoundingClientRect();
+    const relX = ((event.clientX - rect.left) / rect.width) * width;
+    let best = -1;
+    let bestDist = Infinity;
+    for (let i = 0; i < safePoints.length; i += 1) {
+      const p = safePoints[i];
+      if (!p) continue;
+      const dist = Math.abs(p.x - relX);
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = i;
+      }
+    }
+    setHoverIndex(best >= 0 ? best : null);
+  }
+
+  const hoverPoint = hoverIndex !== null ? safePoints[hoverIndex] : null;
+  const hoverValue = hoverIndex !== null ? pickValue(series[hoverIndex], metric.key) : null;
+  const hoverDate = hoverIndex !== null ? series[hoverIndex].date : null;
 
   return (
-    <article className="health-entry-row">
-      <div className={`health-entry-icon ${entry.type}`}>
-        <HealthEntryIcon type={entry.type} />
-      </div>
-      <div className="health-entry-main">
-        {!editing ? (
-          <>
-            <div className="health-entry-copy">
-              <strong>{entryLabel(entry)}</strong>
-              <span>{entryMeta(entry)}</span>
-              {"summary" in entry && entry.summary && entryLabel(entry) !== entry.summary ? <p>{entry.summary}</p> : null}
-              {"notes" in entry && entry.notes ? <small>{entry.notes}</small> : null}
-            </div>
-            {entry.type === "meal" && (
-              <div className="health-entry-facts">
-                <span>{entry.mealType || "meal"}</span>
-                <span>{compactNumber(entry.proteinGEstimate)}g protein</span>
-                <span>{compactNumber(entry.caloriesEstimate)} cal</span>
-                <span>hungry {formatNumber(entry.hunger)}/5</span>
-                <span>gassy {formatNumber(entry.gassiness)}/5</span>
-              </div>
-            )}
-            {entry.type === "workout" && (
-              <div className="health-entry-facts">
-                <span>{entry.workoutType || entry.focus || "training"}</span>
-                {entry.muscles ? <span>{entry.muscles}</span> : null}
-                <span>{formatNumber(entry.durationMinutes, " min")}</span>
-                <span>intensity {formatNumber(entry.intensity)}/5</span>
-                <span>performance {formatNumber(entry.performance)}/5</span>
-              </div>
-            )}
-            {entry.type === "body" && (
-              <div className="health-entry-facts">
-                <span>{formatNumber(entry.sleepHours, "h sleep")}</span>
-                <span>energy {formatNumber(entry.energy)}/5</span>
-                <span>mood {formatNumber(entry.moodScore)}/5</span>
-                <span>stress {formatNumber(entry.stress)}/5</span>
-                <span>sore {formatNumber(entry.soreness)}/5</span>
-                <span>gassy {formatNumber(entry.gassiness)}/5</span>
-              </div>
-            )}
-            {entry.type === "commitment" && (
-              <div className="health-entry-facts">
-                <span>{entry.completedCount}/{entry.targetCount ?? "--"}</span>
-                <span>{entry.reviewDate ?? "no review date"}</span>
-              </div>
-            )}
-          </>
-        ) : (
-          <div className="health-edit-grid">
-            {isLog ? (
-              <>
-                <label>
-                  <span>Time</span>
-                  <input type="datetime-local" value={draft.capturedAt} onChange={(event) => setDraft({ ...draft, capturedAt: event.target.value })} />
-                </label>
-                <label>
-                  <span>Type</span>
-                  <select value={draft.type} onChange={(event) => setDraft({ ...draft, type: event.target.value as HealthEntryType })}>
-                    <option value="meal">Meal</option>
-                    <option value="workout">Workout</option>
-                    <option value="body">Body</option>
-                  </select>
-                </label>
-                {draft.type !== "body" && (
-                  <label className="wide">
-                    <span>Description</span>
-                    <input value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} />
-                  </label>
-                )}
-                <label className="wide">
-                  <span>Summary</span>
-                  <input value={draft.summary} onChange={(event) => setDraft({ ...draft, summary: event.target.value })} />
-                </label>
-              </>
-            ) : (
-              <>
-                <label className="wide">
-                  <span>Title</span>
-                  <input value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} />
-                </label>
-                <label>
-                  <span>Status</span>
-                  <select value={draft.status} onChange={(event) => setDraft({ ...draft, status: event.target.value })}>
-                    <option value="active">Active</option>
-                    <option value="paused">Paused</option>
-                    <option value="done">Done</option>
-                  </select>
-                </label>
-              </>
-            )}
-            {draft.type === "meal" && (
-              <>
-                <label>
-                  <span>Meal</span>
-                  <select value={draft.mealType} onChange={(event) => setDraft({ ...draft, mealType: event.target.value })}>
-                    <option value="">Loose</option>
-                    <option value="breakfast">Breakfast</option>
-                    <option value="lunch">Lunch</option>
-                    <option value="dinner">Dinner</option>
-                    <option value="snack">Snack</option>
-                    <option value="drink">Drink</option>
-                  </select>
-                </label>
-                <label>
-                  <span>Protein</span>
-                  <input inputMode="decimal" value={draft.proteinGEstimate} onChange={(event) => setDraft({ ...draft, proteinGEstimate: event.target.value })} />
-                </label>
-                <label>
-                  <span>Calories</span>
-                  <input inputMode="decimal" value={draft.caloriesEstimate} onChange={(event) => setDraft({ ...draft, caloriesEstimate: event.target.value })} />
-                </label>
-                <label>
-                  <span>Hunger</span>
-                  <input inputMode="numeric" value={draft.hunger} onChange={(event) => setDraft({ ...draft, hunger: event.target.value })} />
-                </label>
-                <label>
-                  <span>Fullness</span>
-                  <input inputMode="numeric" value={draft.fullness} onChange={(event) => setDraft({ ...draft, fullness: event.target.value })} />
-                </label>
-                <label>
-                  <span>Energy after</span>
-                  <input inputMode="numeric" value={draft.energy} onChange={(event) => setDraft({ ...draft, energy: event.target.value })} />
-                </label>
-                <label>
-                  <span>Digestion</span>
-                  <input inputMode="numeric" value={draft.digestion} onChange={(event) => setDraft({ ...draft, digestion: event.target.value })} />
-                </label>
-                <label>
-                  <span>Gassiness</span>
-                  <input inputMode="numeric" value={draft.gassiness} onChange={(event) => setDraft({ ...draft, gassiness: event.target.value })} />
-                </label>
-              </>
-            )}
-            {draft.type === "workout" && (
-              <>
-                <label>
-                  <span>Kind</span>
-                  <input value={draft.workoutType} onChange={(event) => setDraft({ ...draft, workoutType: event.target.value })} />
-                </label>
-                <label>
-                  <span>Focus</span>
-                  <input value={draft.focus} onChange={(event) => setDraft({ ...draft, focus: event.target.value })} />
-                </label>
-                <label>
-                  <span>Muscles</span>
-                  <input value={draft.muscles} onChange={(event) => setDraft({ ...draft, muscles: event.target.value })} />
-                </label>
-                <label>
-                  <span>Minutes</span>
-                  <input inputMode="numeric" value={draft.durationMinutes} onChange={(event) => setDraft({ ...draft, durationMinutes: event.target.value })} />
-                </label>
-                <label>
-                  <span>Intensity</span>
-                  <input inputMode="numeric" value={draft.intensity} onChange={(event) => setDraft({ ...draft, intensity: event.target.value })} />
-                </label>
-                <label>
-                  <span>After</span>
-                  <input inputMode="numeric" value={draft.energyAfter} onChange={(event) => setDraft({ ...draft, energyAfter: event.target.value })} />
-                </label>
-                <label>
-                  <span>Performance</span>
-                  <input inputMode="numeric" value={draft.performance} onChange={(event) => setDraft({ ...draft, performance: event.target.value })} />
-                </label>
-              </>
-            )}
-            {draft.type === "body" && (
-              <>
-                <label>
-                  <span>Sleep</span>
-                  <input inputMode="decimal" value={draft.sleepHours} onChange={(event) => setDraft({ ...draft, sleepHours: event.target.value })} />
-                </label>
-                <label>
-                  <span>Sleep quality</span>
-                  <input inputMode="numeric" value={draft.sleepQuality} onChange={(event) => setDraft({ ...draft, sleepQuality: event.target.value })} />
-                </label>
-                <label>
-                  <span>Energy</span>
-                  <input inputMode="numeric" value={draft.energy} onChange={(event) => setDraft({ ...draft, energy: event.target.value })} />
-                </label>
-                <label>
-                  <span>Mood score</span>
-                  <input inputMode="numeric" value={draft.moodScore} onChange={(event) => setDraft({ ...draft, moodScore: event.target.value })} />
-                </label>
-                <label>
-                  <span>Stress</span>
-                  <input inputMode="numeric" value={draft.stress} onChange={(event) => setDraft({ ...draft, stress: event.target.value })} />
-                </label>
-                <label>
-                  <span>Soreness</span>
-                  <input inputMode="numeric" value={draft.soreness} onChange={(event) => setDraft({ ...draft, soreness: event.target.value })} />
-                </label>
-                <label>
-                  <span>Hydration</span>
-                  <input inputMode="numeric" value={draft.hydration} onChange={(event) => setDraft({ ...draft, hydration: event.target.value })} />
-                </label>
-                <label>
-                  <span>Gassiness</span>
-                  <input inputMode="numeric" value={draft.gassiness} onChange={(event) => setDraft({ ...draft, gassiness: event.target.value })} />
-                </label>
-                <label>
-                  <span>Mood</span>
-                  <input value={draft.mood} onChange={(event) => setDraft({ ...draft, mood: event.target.value })} />
-                </label>
-                <label>
-                  <span>Pain</span>
-                  <input value={draft.pain} onChange={(event) => setDraft({ ...draft, pain: event.target.value })} />
-                </label>
-                <label>
-                  <span>Symptoms</span>
-                  <input value={draft.symptoms} onChange={(event) => setDraft({ ...draft, symptoms: event.target.value })} />
-                </label>
-              </>
-            )}
-            {draft.type === "commitment" && (
-              <>
-                <label>
-                  <span>Cadence</span>
-                  <input value={draft.cadence} onChange={(event) => setDraft({ ...draft, cadence: event.target.value })} />
-                </label>
-                <label>
-                  <span>Target</span>
-                  <input inputMode="numeric" value={draft.targetCount} onChange={(event) => setDraft({ ...draft, targetCount: event.target.value })} />
-                </label>
-                <label>
-                  <span>Done</span>
-                  <input inputMode="numeric" value={draft.completedCount} onChange={(event) => setDraft({ ...draft, completedCount: event.target.value })} />
-                </label>
-                <label>
-                  <span>Review</span>
-                  <input type="date" value={draft.reviewDate} onChange={(event) => setDraft({ ...draft, reviewDate: event.target.value })} />
-                </label>
-              </>
-            )}
-            <label className="wide">
-              <span>{draft.type === "commitment" ? "Description" : "Notes"}</span>
-              <input
-                value={draft.type === "commitment" ? draft.description : draft.notes}
-                onChange={(event) =>
-                  setDraft({
-                    ...draft,
-                    description: draft.type === "commitment" || draft.type === "body" ? event.target.value : draft.description,
-                    notes: draft.type === "commitment" ? draft.notes : event.target.value,
-                  })
-                }
-              />
-            </label>
-          </div>
-        )}
-        {error ? <p className="health-error">{error}</p> : null}
-      </div>
-      <div className="health-entry-actions">
-        {editing ? (
-          <>
-            <button disabled={saving} onClick={save} type="button">
-              {saving ? <LoaderCircle className="spin" size={15} /> : <Send size={15} />}
-            </button>
-            <button disabled={saving} onClick={() => setEditing(false)} type="button">
-              <X size={15} />
-            </button>
-          </>
-        ) : (
-          <>
-            <button disabled={saving} onClick={() => setEditing(true)} type="button">
-              <Pencil size={15} />
-            </button>
-            <button disabled={saving} onClick={remove} type="button">
-              <Trash2 size={15} />
-            </button>
-          </>
-        )}
-      </div>
-    </article>
+    <svg
+      ref={svgRef}
+      className="big-chart-svg"
+      viewBox={`0 0 ${width} ${height}`}
+      preserveAspectRatio="none"
+      onMouseMove={handleMove}
+      onMouseLeave={() => setHoverIndex(null)}
+    >
+      <defs>
+        <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stopColor={metric.color} stopOpacity={0.32} />
+          <stop offset="100%" stopColor={metric.color} stopOpacity={0} />
+        </linearGradient>
+      </defs>
+      <text x={padX} y={18} className="big-chart-axis-label" fill="currentColor" opacity={0.45}>
+        {metric.precision === 0 ? Math.round(max) : max.toFixed(1)}
+        {metric.unit}
+      </text>
+      <text x={padX} y={height - 8} className="big-chart-axis-label" fill="currentColor" opacity={0.45}>
+        {metric.precision === 0 ? Math.round(min) : min.toFixed(1)}
+        {metric.unit}
+      </text>
+      {segs.map((seg, index) => (
+        <path key={`fill-${index}`} d={areaFrom(seg)} fill={`url(#${gradientId})`} />
+      ))}
+      {segs.map((seg, index) => (
+        <path
+          key={`line-${index}`}
+          d={pathFrom(seg)}
+          fill="none"
+          stroke={metric.color}
+          strokeWidth={2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      ))}
+      {lastPoint && !hoverPoint ? (
+        <>
+          <circle cx={lastPoint.x} cy={lastPoint.y} r={14} fill={metric.glow} opacity={0.45} />
+          <circle cx={lastPoint.x} cy={lastPoint.y} r={5} fill={metric.color} />
+        </>
+      ) : null}
+      {hoverPoint && hoverValue !== null && hoverDate ? (
+        <>
+          <line
+            x1={hoverPoint.x}
+            x2={hoverPoint.x}
+            y1={padY / 2}
+            y2={height - padY / 2}
+            stroke={metric.color}
+            strokeWidth={1}
+            strokeDasharray="3 4"
+            opacity={0.45}
+          />
+          <circle cx={hoverPoint.x} cy={hoverPoint.y} r={14} fill={metric.glow} opacity={0.45} />
+          <circle cx={hoverPoint.x} cy={hoverPoint.y} r={5} fill={metric.color} />
+          <g
+            transform={`translate(${Math.min(width - 110, Math.max(10, hoverPoint.x - 55))}, ${Math.max(8, hoverPoint.y - 56)})`}
+            style={{ pointerEvents: "none" }}
+          >
+            <rect width={110} height={42} rx={8} fill="transparent" />
+            <text x={10} y={17} className="big-chart-tip-date" fill="currentColor" opacity={0.6}>
+              {formatHoverDate(hoverDate)}
+            </text>
+            <text x={10} y={33} className="big-chart-tip-value" fill="currentColor">
+              {formatValue(hoverValue, metric.precision)}
+              {metric.unit}
+            </text>
+          </g>
+        </>
+      ) : null}
+    </svg>
   );
 }
 
-function latestBodySummary(body: HealthOverview["today"]["body"]) {
-  if (!body.count) return "No body check-in";
-  return [
-    body.sleepHours === null ? null : `${body.sleepHours}h sleep`,
-    body.sleepQuality === null ? null : `${body.sleepQuality}/5 sleep quality`,
-    body.energy === null ? null : `${body.energy}/5 energy`,
-    body.moodScore === null ? null : `${body.moodScore}/5 mood`,
-    body.stress === null ? null : `${body.stress}/5 stress`,
-    body.mood,
-  ]
-    .filter(Boolean)
-    .join(" / ");
-}
-
 export function HealthPanel() {
-  const [overview, setOverview] = useState<HealthOverview | null>(null);
+  const [series, setSeries] = useState<HealthSeriesPoint[]>([]);
+  const [range, setRange] = useState<Range>(30);
+  const [activeKey, setActiveKey] = useState<MetricKey>("sleepHours");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [captureText, setCaptureText] = useState("");
-  const [captureError, setCaptureError] = useState<string | null>(null);
-  const [confirmation, setConfirmation] = useState<string | null>(null);
-  const [capturing, setCapturing] = useState(false);
-  const [dictating, setDictating] = useState(false);
-  const [commitmentTitle, setCommitmentTitle] = useState("");
-  const [commitmentTarget, setCommitmentTarget] = useState("");
-  const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
-  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [rhythmBullets, setRhythmBullets] = useState<string[]>([]);
 
-  const loadOverview = useCallback(async () => {
+  useEffect(() => {
+    let cancelled = false;
+    loadHealthRhythm(60)
+      .then((result) => { if (!cancelled) setRhythmBullets(result.bullets); })
+      .catch(() => { if (!cancelled) setRhythmBullets([]); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const refresh = useCallback(async (nextRange: Range) => {
     setRefreshing(true);
     try {
-      const nextOverview = await loadHealthOverview();
-      setOverview(nextOverview);
-      setCaptureError(null);
-    } catch (error) {
-      setCaptureError(error instanceof Error ? error.message : "Could not load health overview");
+      const result = await loadHealthSeries(nextRange);
+      setSeries(result.series);
+      setError(null);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Could not load analytics");
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -662,213 +267,108 @@ export function HealthPanel() {
   }, []);
 
   useEffect(() => {
-    loadOverview();
-  }, [loadOverview]);
+    refresh(range);
+  }, [range, refresh]);
 
-  useEffect(() => {
-    return () => recognitionRef.current?.stop();
-  }, []);
+  const visibleMetrics = useMemo(() => {
+    return METRICS.filter((metric) => {
+      if (metric.key !== "weight") return true;
+      return series.some((point) => point.weight !== null);
+    });
+  }, [series]);
 
-  async function submitCapture(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!captureText.trim()) return;
+  const activeMetric = useMemo(
+    () => visibleMetrics.find((metric) => metric.key === activeKey) ?? visibleMetrics[0] ?? METRICS[0],
+    [activeKey, visibleMetrics],
+  );
 
-    setCapturing(true);
-    setCaptureError(null);
-    setConfirmation(null);
-    try {
-      const response = await captureHealth(captureText);
-      setConfirmation(response.confirmation);
-      setCaptureText("");
-      await loadOverview();
-    } catch (error) {
-      setCaptureError(error instanceof Error ? error.message : "Could not capture health update");
-    } finally {
-      setCapturing(false);
-    }
-  }
-
-  function startDictation() {
-    const SpeechRecognition = (window as WindowWithSpeech).SpeechRecognition ?? (window as WindowWithSpeech).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      setCaptureError("Browser dictation is unavailable here. Use the text box or the iPhone Shortcut.");
-      textAreaRef.current?.focus();
-      return;
-    }
-
-    const baseText = captureText.trim();
-    const recognition = new SpeechRecognition();
-    recognition.continuous = false;
-    recognition.interimResults = true;
-    recognition.lang = "en-US";
-    recognition.onresult = (event) => {
-      const segments: string[] = [];
-      for (let index = 0; index < event.results.length; index += 1) {
-        segments.push(event.results[index][0].transcript);
-      }
-      setCaptureText([baseText, segments.join(" ")].filter(Boolean).join(" "));
-    };
-    recognition.onerror = (event) => {
-      setCaptureError(event.error ? `Dictation stopped: ${event.error}` : "Dictation stopped");
-      setDictating(false);
-    };
-    recognition.onend = () => setDictating(false);
-    recognitionRef.current = recognition;
-    setDictating(true);
-    recognition.start();
-  }
-
-  async function addCommitment(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!commitmentTitle.trim()) return;
-    setCaptureError(null);
-    try {
-      await createHealthCommitment({
-        cadence: "weekly",
-        targetCount: numberOrNull(commitmentTarget),
-        title: commitmentTitle,
-      });
-      setCommitmentTitle("");
-      setCommitmentTarget("");
-      await loadOverview();
-    } catch (error) {
-      setCaptureError(error instanceof Error ? error.message : "Could not create commitment");
-    }
-  }
-
-  const today = overview?.today;
-  const recent = overview?.recent ?? [];
-  const commitments = overview?.commitments ?? [];
-  const generatedLabel = useMemo(() => (overview ? formatDateTime(overview.generatedAt) : ""), [overview]);
+  const latest = lastNonNull(series, activeMetric.key);
+  const delta = deltaPercent(series, activeMetric.key);
+  const deltaSign = delta === null ? null : delta > 0.5 ? "up" : delta < -0.5 ? "down" : "flat";
+  const rangeStart = series[0]?.date;
+  const rangeEnd = series[series.length - 1]?.date;
 
   return (
-    <section className="health-panel" aria-label="Health overview">
-      <div className="health-shell">
+    <section className="health-panel" aria-label="Health analytics">
+      <div className="health-shell health-analytics">
         <header className="health-heading">
           <div>
             <span>Health</span>
             <h3>Overview</h3>
           </div>
-          <button disabled={refreshing} onClick={loadOverview} type="button">
-            <RefreshCw className={refreshing ? "spin" : ""} size={15} />
-            Refresh
-          </button>
+          <div className="health-range-toolbar">
+            <div className="range-text" role="tablist" aria-label="Range">
+              {([7, 30, 90] as Range[]).flatMap((value, index) => {
+                const button = (
+                  <button
+                    key={value}
+                    className={`range-text-btn${range === value ? " is-active" : ""}`}
+                    onClick={() => setRange(value)}
+                    role="tab"
+                    aria-selected={range === value}
+                    type="button"
+                  >
+                    {value}d
+                  </button>
+                );
+                return index === 0 ? [button] : [<span key={`sep-${value}`} className="range-sep">·</span>, button];
+              })}
+            </div>
+            <button className="range-refresh" disabled={refreshing} onClick={() => refresh(range)} type="button" aria-label="Refresh">
+              {refreshing ? <LoaderCircle className="spin" size={14} /> : <RefreshCw size={14} />}
+            </button>
+          </div>
         </header>
 
-        <form className="health-capture" onSubmit={submitCapture}>
-          <div className="health-capture-toolbar">
-            <button className={dictating ? "active" : ""} onClick={startDictation} type="button">
-              <Mic size={18} />
-              {dictating ? "Listening" : "Voice"}
-            </button>
-            <span>{generatedLabel || "Ready"}</span>
+        {error ? <p className="health-error">{error}</p> : null}
+
+        {loading ? (
+          <div className="health-spark-loading">
+            <LoaderCircle className="spin" size={18} />
           </div>
-          <textarea
-            ref={textAreaRef}
-            value={captureText}
-            onChange={(event) => setCaptureText(event.target.value)}
-            placeholder="Slept 6h20, quality 2. Eggs and yogurt for breakfast, chicken bowl lunch, pasta dinner, gassy after dinner. Lifted legs 45 min. Energy 3, mood calm, stress 3, sore legs, knee tight because hips felt tight."
-          />
-          <div className="health-capture-actions">
-            <button disabled={capturing || !captureText.trim()} type="submit">
-              {capturing ? <LoaderCircle className="spin" size={16} /> : <Send size={16} />}
-              Capture
-            </button>
+        ) : (
+          <div className="big-chart">
+            {rhythmBullets.length ? (
+              <section className="insights-block">
+                <header>
+                  <span className="insights-eyebrow">Insights</span>
+                  <h4>What your last 60 days say</h4>
+                </header>
+                <ul>
+                  {rhythmBullets.map((bullet) => (
+                    <li key={bullet}>{bullet}</li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
+            <div className="big-chart-top">
+              <select
+                className="metric-select"
+                value={activeMetric.key}
+                onChange={(event) => setActiveKey(event.target.value as MetricKey)}
+                aria-label="Metric"
+              >
+                {visibleMetrics.map((metric) => (
+                  <option key={metric.key} value={metric.key}>{metric.label}</option>
+                ))}
+              </select>
+              <div className="big-chart-readout">
+                <strong>{formatValue(latest, activeMetric.precision)}</strong>
+                <em>{activeMetric.unit}</em>
+                {delta !== null ? (
+                  <span className={`big-chart-delta big-chart-delta-${deltaSign}`}>
+                    {delta > 0 ? "+" : ""}
+                    {delta.toFixed(0)}%
+                  </span>
+                ) : null}
+              </div>
+            </div>
+            <div className="big-chart-canvas">
+              <BigChart metric={activeMetric} series={series} />
+            </div>
+            <div className="big-chart-foot">{rangeStart} → {rangeEnd}</div>
           </div>
-        </form>
-
-        {confirmation ? <p className="health-confirmation">{confirmation}</p> : null}
-        {captureError ? <p className="health-error">{captureError}</p> : null}
-
-        <div className="health-today-grid" aria-busy={loading}>
-          <article className="health-today-card">
-            <Utensils size={18} />
-            <span>Food</span>
-            <strong>{today?.meals.count ?? 0}</strong>
-            <p>
-              {compactNumber(today?.meals.proteinGEstimate ?? null)}g protein / {compactNumber(today?.meals.caloriesEstimate ?? null)} cal
-            </p>
-            <small>{today?.meals.lastDescription ?? "No meals logged"}</small>
-          </article>
-          <article className="health-today-card">
-            <Dumbbell size={18} />
-            <span>Training</span>
-            <strong>{today?.workouts.count ?? 0}</strong>
-            <p>{formatNumber(today?.workouts.durationMinutes ?? null, " min")} / intensity {formatNumber(today?.workouts.averageIntensity ?? null)}/5</p>
-            <small>{today?.workouts.lastDescription ?? "No workout logged"}</small>
-          </article>
-          <article className="health-today-card">
-            <HeartPulse size={18} />
-            <span>Body</span>
-            <strong>{today?.body.count ?? 0}</strong>
-            <p>{today ? latestBodySummary(today.body) : "Loading"}</p>
-            <small>
-              {[
-                today?.body.soreness === null ? null : `Soreness ${today?.body.soreness}/5`,
-                today?.body.gassiness === null ? null : `Gassiness ${today?.body.gassiness}/5`,
-                today?.body.pain ? `Pain: ${today.body.pain}` : null,
-              ]
-                .filter(Boolean)
-                .join(" / ") || "No body details"}
-            </small>
-          </article>
-          <article className="health-today-card">
-            <Activity size={18} />
-            <span>Commitments</span>
-            <strong>{today?.commitments.activeCount ?? 0}</strong>
-            <p>{today?.commitments.dueCount ?? 0} due for review</p>
-            <small>{today?.commitments.next?.title ?? "No active commitment"}</small>
-          </article>
-        </div>
-
-        <div className="health-lower-grid">
-          <section className="health-insights">
-            <div className="health-section-heading">
-              <span>Patterns</span>
-            </div>
-            {overview?.insights.length ? overview.insights.map((insight) => <p key={insight}>{insight}</p>) : <p>No patterns yet.</p>}
-          </section>
-
-          <section className="health-commitments">
-            <div className="health-section-heading">
-              <span>Commitments</span>
-            </div>
-            <form className="health-commitment-form" onSubmit={addCommitment}>
-              <input value={commitmentTitle} onChange={(event) => setCommitmentTitle(event.target.value)} placeholder="Weekly choice" />
-              <input inputMode="numeric" value={commitmentTarget} onChange={(event) => setCommitmentTarget(event.target.value)} placeholder="Target" />
-              <button disabled={!commitmentTitle.trim()} type="submit" aria-label="Add commitment">
-                <Plus size={15} />
-              </button>
-            </form>
-            <div className="health-commitment-list">
-              {commitments.length ? (
-                commitments.slice(0, 4).map((commitment: HealthCommitmentEntry) => (
-                  <div key={commitment.id}>
-                    <strong>{commitment.title}</strong>
-                    <span>{commitment.completedCount}/{commitment.targetCount ?? "--"} / {commitment.cadence}</span>
-                  </div>
-                ))
-              ) : (
-                <p>No commitments yet.</p>
-              )}
-            </div>
-          </section>
-        </div>
-
-        <section className="health-recent">
-          <div className="health-section-heading">
-            <span>Recent</span>
-          </div>
-          {recent.length ? (
-            <div className="health-entry-list">
-              {recent.map((entry) => (
-                <HealthEntryCard entry={entry} key={`${entry.type}-${entry.id}`} onChanged={loadOverview} />
-              ))}
-            </div>
-          ) : (
-            <p className="health-empty">No health entries yet.</p>
-          )}
-        </section>
+        )}
       </div>
     </section>
   );

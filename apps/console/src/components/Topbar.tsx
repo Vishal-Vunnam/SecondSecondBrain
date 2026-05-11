@@ -3,6 +3,7 @@ import {
   Activity,
   BookOpenText,
   ChevronDown,
+  CircleDollarSign,
   Dumbbell,
   GalleryVerticalEnd,
   Glasses,
@@ -12,10 +13,14 @@ import {
   LogOut,
   Moon,
   Palette,
+  PieChart,
+  Receipt,
   RefreshCw,
+  ShoppingCart,
   Sun,
   Terminal,
   Utensils,
+  Wallet,
 } from "lucide-react";
 import { appModules } from "../config/modules";
 import type { AppModule, AppModuleId, AppTheme } from "../types";
@@ -38,12 +43,17 @@ const moduleIcons: Record<AppModuleId, typeof BookOpenText> = {
   terminal: Terminal,
   system: GalleryVerticalEnd,
   health: Activity,
+  "health-log": HeartPulse,
   "health-food": Utensils,
   fitness: Dumbbell,
   "health-body": HeartPulse,
+  money: Wallet,
+  shopping: ShoppingCart,
+  budget: PieChart,
+  expenses: Receipt,
 };
 
-type NavDropdownId = "knowledge" | "health";
+type NavDropdownId = "knowledge" | "health" | "money";
 
 type NavDropdown = {
   id: NavDropdownId;
@@ -68,7 +78,14 @@ const navDropdowns: NavDropdown[] = [
     label: "Health",
     description: "Overview, food, fitness, and body logs.",
     Icon: Activity,
-    moduleIds: ["health", "health-food", "fitness", "health-body"],
+    moduleIds: ["health", "health-log", "health-food", "fitness", "health-body"],
+  },
+  {
+    id: "money",
+    label: "Money",
+    description: "Shopping, budget, and expenses.",
+    Icon: CircleDollarSign,
+    moduleIds: ["money", "shopping", "budget", "expenses"],
   },
 ];
 

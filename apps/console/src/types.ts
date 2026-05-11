@@ -9,11 +9,39 @@ export type Service = {
   endpoint: string;
 };
 
-export type AppModuleId = "home" | "tasks" | "notes" | "terminal" | "system" | "health" | "health-food" | "fitness" | "health-body";
+export type AppModuleId =
+  | "home"
+  | "tasks"
+  | "notes"
+  | "terminal"
+  | "system"
+  | "health"
+  | "health-log"
+  | "health-food"
+  | "fitness"
+  | "health-body"
+  | "money"
+  | "shopping"
+  | "budget"
+  | "expenses";
 
 export type AppModuleStatus = "active" | "planned";
 
-export type AppModuleGroup = "home" | "knowledge" | "health";
+export type AppModuleGroup = "home" | "knowledge" | "health" | "money";
+
+export type ShoppingNecessity = "essential" | "important" | "nice";
+
+export type ShoppingItem = {
+  id: number;
+  title: string;
+  reasoning: string | null;
+  type: string | null;
+  necessity: ShoppingNecessity;
+  gotIt: boolean;
+  link: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
 
 export type AppModule = {
   id: AppModuleId;
@@ -38,6 +66,7 @@ export type VaultEntry = {
   type: "directory" | "file";
   size: number;
   modifiedAt: string;
+  children?: VaultEntry[];
 };
 
 export type VaultDirectory = {

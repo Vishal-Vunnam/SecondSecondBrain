@@ -29,3 +29,36 @@ export async function saveVaultFile(path: string, content: string) {
   });
   return parseJson<VaultFile>(response);
 }
+
+export async function loadVaultTree(path = "") {
+  const response = await fetch(apiUrl(`/api/vault/tree?recursive=1&path=${encodeURIComponent(path)}`), { cache: "no-store", credentials: "include" });
+  return parseJson<VaultDirectory>(response);
+}
+
+export async function createVaultFolder(path: string) {
+  const response = await fetch(apiUrl("/api/vault/folder"), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ path }),
+  });
+  return parseJson<{ path: string; name: string }>(response);
+}
+
+export async function renameVaultEntry(from: string, to: string) {
+  const response = await fetch(apiUrl("/api/vault/rename"), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ from, to }),
+  });
+  return parseJson<{ path: string; name: string; type: "file" | "directory" }>(response);
+}
+
+export async function deleteVaultEntry(path: string) {
+  const response = await fetch(apiUrl(`/api/vault/entry?path=${encodeURIComponent(path)}`), {
+    method: "DELETE",
+    credentials: "include",
+  });
+  return parseJson<{ deleted: true }>(response);
+}

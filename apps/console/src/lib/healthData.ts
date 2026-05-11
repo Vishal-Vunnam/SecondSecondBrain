@@ -76,3 +76,60 @@ export async function createHealthCommitment(input: {
   });
   return parseJson<{ commitment: HealthCommitmentEntry }>(response);
 }
+
+export type HealthCalendarDay = {
+  date: string;
+  score: number;
+  hasMeal: boolean;
+  hasWorkout: boolean;
+  hasBody: boolean;
+};
+
+export async function loadHealthCalendar(days = 60) {
+  const response = await fetch(apiUrl(`/api/health/log-calendar?days=${days}&timezone=${encodeURIComponent(timezone())}`), {
+    cache: "no-store",
+    credentials: "include",
+  });
+  return parseJson<{ calendar: HealthCalendarDay[]; today: string }>(response);
+}
+
+export type HealthSeriesPoint = {
+  date: string;
+  sleepHours: number | null;
+  sleepQuality: number | null;
+  energy: number | null;
+  mood: number | null;
+  stress: number | null;
+  soreness: number | null;
+  weight: number | null;
+  protein: number | null;
+  calories: number | null;
+  workoutMinutes: number | null;
+  workoutIntensity: number | null;
+};
+
+export async function loadHealthSeries(days = 30) {
+  const response = await fetch(apiUrl(`/api/health/series?days=${days}&timezone=${encodeURIComponent(timezone())}`), {
+    cache: "no-store",
+    credentials: "include",
+  });
+  return parseJson<{ series: HealthSeriesPoint[]; today: string; days: number }>(response);
+}
+
+export async function loadHealthRhythm(days = 60) {
+  const response = await fetch(apiUrl(`/api/health/rhythm?days=${days}&timezone=${encodeURIComponent(timezone())}`), {
+    cache: "no-store",
+    credentials: "include",
+  });
+  return parseJson<{ bullets: string[]; generatedAt: string; days: number }>(response);
+}
+
+export async function captureHealthLog(text: string, date?: string) {
+  const response = await fetch(apiUrl(`/api/health/log?timezone=${encodeURIComponent(timezone())}`), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ text, date }),
+  });
+  return parseJson<HealthCaptureResponse>(response);
+}
