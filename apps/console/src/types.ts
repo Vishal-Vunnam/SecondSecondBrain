@@ -31,6 +31,54 @@ export type AppModuleGroup = "home" | "knowledge" | "health" | "money";
 
 export type ShoppingNecessity = "essential" | "important" | "nice";
 
+export type WorkoutStatus = "planned" | "done" | "skipped";
+
+export type WorkoutSet = {
+  id?: number;
+  exercise: string;
+  weight: number | null;
+  reps: number | null;
+  position: number;
+};
+
+export type Workout = {
+  id: number;
+  date: string;
+  name: string;
+  description: string | null;
+  status: WorkoutStatus;
+  planned: boolean;
+  recurrenceId: number | null;
+  createdAt: string;
+  updatedAt: string;
+  sets: WorkoutSet[];
+};
+
+export type WorkoutRecurrence = {
+  id: number;
+  name: string;
+  description: string | null;
+  daysOfWeek: number[];
+  templateSets: { exercise: string; weight: number | null; reps: number | null }[];
+  startDate: string;
+  endDate: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ExerciseSummary = { name: string; uses: number };
+
+export type FitnessStats = {
+  thisWeek: {
+    weekStart: string;
+    workoutsDone: number;
+    workoutsPlanned: number;
+    volume: number;
+    volumePrevWeek: number;
+  };
+  volumeByWeek: { weekStart: string; volume: number }[];
+};
+
 export type ShoppingItem = {
   id: number;
   title: string;

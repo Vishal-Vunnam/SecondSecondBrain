@@ -6,7 +6,6 @@ import {
   CircleDollarSign,
   Dumbbell,
   GalleryVerticalEnd,
-  Glasses,
   HeartPulse,
   Home,
   ListTodo,
@@ -156,12 +155,8 @@ export function Topbar({ activeModule, activeModuleId, onLogout, onRefresh, onSe
   return (
     <header className="topbar">
       <div className="topbar-title">
-        <div>
-          <h1 className="brand-wordmark">vishal.ai</h1>
-        </div>
-        <span className="brand-mark" aria-hidden="true">
-          <Glasses size={18} />
-        </span>
+        <span className="brand-pulse" aria-hidden="true" />
+        <h1 className="brand-wordmark">vishalbot</h1>
       </div>
       <nav className="module-nav" aria-label="Application modules" ref={navRef}>
         {primaryModules.map((module) => renderModuleButton(module))}

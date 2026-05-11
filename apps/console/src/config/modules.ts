@@ -69,9 +69,9 @@ export const appModules: AppModule[] = [
     id: "fitness",
     title: "Fitness",
     shortTitle: "Fitness",
-    description: "Training, recovery, and progress workspace.",
+    description: "Workout calendar, sets, and recurring sessions.",
     group: "health",
-    status: "planned",
+    status: "active",
   },
   {
     id: "health-body",
