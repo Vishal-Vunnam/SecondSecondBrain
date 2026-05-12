@@ -33,6 +33,7 @@ BRAIN_CONSOLE_PORT=8080
 BRAIN_CONSOLE_PASSWORD=$(random_secret)
 BRAIN_CONSOLE_SESSION_SECRET=$(random_secret)
 VISHAL_AI_INTAKE_TOKEN=$(random_secret)
+MCP_BEARER_TOKEN=$(random_secret)
 VISHAL_AI_DB_PATH=/data/vishal-ai.db
 COOKIE_SECURE=false
 GEMINI_API_KEY=
@@ -77,6 +78,10 @@ ensure_env_key "COOKIE_SECURE" "false"
 if ! grep -q "^BRAIN_CONSOLE_PASSWORD=" .env; then
   printf 'BRAIN_CONSOLE_PASSWORD=%s\n' "$(random_secret)" >> .env
   echo "added BRAIN_CONSOLE_PASSWORD to .env"
+fi
+if ! grep -q "^MCP_BEARER_TOKEN=" .env; then
+  printf 'MCP_BEARER_TOKEN=%s\n' "$(random_secret)" >> .env
+  echo "added MCP_BEARER_TOKEN to .env"
 fi
 if ! grep -q "^BRAIN_CONSOLE_SESSION_SECRET=" .env; then
   printf 'BRAIN_CONSOLE_SESSION_SECRET=%s\n' "$(random_secret)" >> .env
