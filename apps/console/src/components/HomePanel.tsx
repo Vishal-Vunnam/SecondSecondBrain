@@ -74,7 +74,7 @@ export function HomePanel({ noteCount, onSelectModule, statuses }: HomePanelProp
         <div>
           <span>{yearLabel}</span>
           <h3>{dateLabel}</h3>
-          <p>Vishal.ai keeps the day in view: notes, shell tools, signals, and the next little system worth building.</p>
+          <p>Vishalbot is useful in proportion to how much Vishal uses it.</p>
         </div>
         <div className="date-card" aria-label="Today">
           <CalendarDays size={18} />
