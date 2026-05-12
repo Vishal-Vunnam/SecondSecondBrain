@@ -1,4 +1,4 @@
-import { ExternalLink, Terminal } from "lucide-react";
+import { ExternalLink, Sparkles } from "lucide-react";
 
 type TerminalPanelProps = {
   terminalUrl: string;
@@ -6,11 +6,12 @@ type TerminalPanelProps = {
 
 export function TerminalPanel({ terminalUrl }: TerminalPanelProps) {
   return (
-    <section className="terminal-panel" id="terminal" aria-label="Vault terminal">
+    <section className="terminal-panel" id="terminal" aria-label="vishalbot agent">
       <header className="terminal-heading">
         <div>
-          <Terminal size={15} />
-          <h3>Vault shell</h3>
+          <Sparkles size={15} />
+          <h3>vishalbot</h3>
+          <span className="terminal-subtitle">Claude Code · vault session</span>
         </div>
         <a href={terminalUrl} target="_blank" rel="noreferrer" className="terminal-link">
           <ExternalLink size={15} />
@@ -18,7 +19,7 @@ export function TerminalPanel({ terminalUrl }: TerminalPanelProps) {
         </a>
       </header>
       <div className="terminal-frame">
-        <iframe title="Vishal.ai terminal" src={terminalUrl} />
+        <iframe title="vishalbot terminal" src={terminalUrl} />
       </div>
     </section>
   );

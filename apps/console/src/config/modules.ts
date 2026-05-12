@@ -27,9 +27,9 @@ export const appModules: AppModule[] = [
   },
   {
     id: "terminal",
-    title: "Terminal",
-    shortTitle: "Shell",
-    description: "Raw shell access in the synced vault folder.",
+    title: "vishalbot",
+    shortTitle: "Agent",
+    description: "Claude Code agent over your vault, tasks, health, and shopping.",
     group: "knowledge",
     status: "active",
   },

@@ -2375,6 +2375,18 @@ button { -webkit-tap-highlight-color: transparent; }
   font-family: var(--sans);
   font-size: 12px;
   font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+.terminal-subtitle {
+  margin-left: 6px;
+  padding-left: 8px;
+  border-left: 1px solid var(--terminal-line);
+  color: var(--terminal-muted);
+  font-family: var(--sans);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .terminal-link {
@@ -2434,8 +2446,9 @@ button { -webkit-tap-highlight-color: transparent; }
 
 .terminal-frame {
   min-height: 0;
+  padding: 8px;
   background:
-    radial-gradient(circle at top right, rgba(49, 115, 129, 0.1), transparent 32%),
+    radial-gradient(circle at top right, rgba(49, 115, 129, 0.14), transparent 38%),
     var(--terminal-bg);
 }
 
@@ -2444,7 +2457,9 @@ button { -webkit-tap-highlight-color: transparent; }
   width: 100%;
   height: 100%;
   border: 0;
+  border-radius: var(--radius);
   background: var(--terminal-bg);
+  box-shadow: 0 0 0 1px var(--terminal-line);
 }
 
 .manuscript-panel {
