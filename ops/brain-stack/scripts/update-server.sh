@@ -12,6 +12,8 @@ UPDATE_SERVICES="${UPDATE_SERVICES:-brain-console caddy}"
 RESTART_TERMINAL="${RESTART_TERMINAL:-0}"
 RUN_DOCTOR="${RUN_DOCTOR:-1}"
 DRY_RUN="${DRY_RUN:-0}"
+BRAIN_SESSION="${BRAIN_SESSION:-1}"
+BRAIN_SESSION_NAME="${BRAIN_SESSION_NAME:-brain}"
 
 run() {
   if [[ "$DRY_RUN" == "1" ]]; then
@@ -68,6 +70,19 @@ fi
 if [[ "$RUN_DOCTOR" == "1" ]]; then
   echo "running doctor"
   run ./scripts/doctor.sh || true
+fi
+
+if [[ "$BRAIN_SESSION" == "1" ]]; then
+  if ! command -v tmux >/dev/null 2>&1; then
+    echo "tmux not installed; skipping brain session"
+  elif ! command -v claude >/dev/null 2>&1; then
+    echo "claude CLI not found; skipping brain session"
+  elif tmux has-session -t "$BRAIN_SESSION_NAME" 2>/dev/null; then
+    echo "brain tmux session '$BRAIN_SESSION_NAME' already running"
+  else
+    echo "starting brain tmux session '$BRAIN_SESSION_NAME'"
+    run tmux new-session -d -s "$BRAIN_SESSION_NAME" -c "$STACK_DIR/vault" "claude"
+  fi
 fi
 
 echo "update complete"
