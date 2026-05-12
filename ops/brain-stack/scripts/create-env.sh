@@ -25,6 +25,11 @@ TAILSCALE_IP_VALUE="${TAILSCALE_IP_VALUE:-127.0.0.1}"
 
 umask 077
 
+mkdir -p secrets
+if [[ ! -f secrets/.gitkeep ]]; then
+  : > secrets/.gitkeep
+fi
+
 if [[ ! -f .env ]]; then
   cat > .env <<ENV
 TAILSCALE_IP=${TAILSCALE_IP_VALUE}
@@ -94,6 +99,12 @@ fi
 ensure_env_key "GEMINI_API_KEY" ""
 ensure_env_key "GEMINI_TASK_MODEL" "gemini-2.5-flash"
 ensure_env_key "GEMINI_HEALTH_MODEL" "gemini-2.5-flash-lite"
+ensure_env_key "GOOGLE_VERTEX_PROJECT" ""
+ensure_env_key "GOOGLE_VERTEX_LOCATION" "us-central1"
+ensure_env_key "GOOGLE_APPLICATION_CREDENTIALS" "/secrets/gcp.json"
+ensure_env_key "XAI_API_KEY" ""
+ensure_env_key "AGENT_DAILY_REQUEST_CAP" "500"
+ensure_env_key "AGENT_DEFAULT_MODEL" "flash-lite"
 ensure_env_key "VISHAL_AI_DB_PATH" "/data/vishal-ai.db"
 ensure_env_key "TERMINAL_PORT" "7681"
 ensure_env_key "TERMINAL_BASE_PATH" ""

@@ -10,6 +10,7 @@ import { PlannedModulePanel } from "./components/PlannedModulePanel";
 import { ShoppingPanel } from "./components/ShoppingPanel";
 import { TasksPanel } from "./components/TasksPanel";
 import { TerminalPanel } from "./components/TerminalPanel";
+import { AgentDock } from "./components/AgentDock";
 import { Topbar } from "./components/Topbar";
 import { VaultPane } from "./components/VaultPane";
 import { getAppModule } from "./config/modules";
@@ -367,6 +368,7 @@ export function App() {
           </div>
         </section>
       </div>
+      <AgentDock />
     </main>
   );
 }

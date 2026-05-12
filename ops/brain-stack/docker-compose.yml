@@ -23,9 +23,19 @@ services:
       GEMINI_API_KEY: "${GEMINI_API_KEY:-}"
       GEMINI_TASK_MODEL: "${GEMINI_TASK_MODEL:-gemini-2.5-flash}"
       GEMINI_HEALTH_MODEL: "${GEMINI_HEALTH_MODEL:-gemini-2.5-flash-lite}"
+      GOOGLE_VERTEX_PROJECT: "${GOOGLE_VERTEX_PROJECT:-}"
+      GOOGLE_VERTEX_LOCATION: "${GOOGLE_VERTEX_LOCATION:-us-central1}"
+      GOOGLE_APPLICATION_CREDENTIALS: "${GOOGLE_APPLICATION_CREDENTIALS:-/secrets/gcp.json}"
+      XAI_API_KEY: "${XAI_API_KEY:-}"
+      AGENT_DAILY_REQUEST_CAP: "${AGENT_DAILY_REQUEST_CAP:-500}"
+      AGENT_DEFAULT_MODEL: "${AGENT_DEFAULT_MODEL:-flash-lite}"
+      AGENT_MODEL_HAIKU: "${AGENT_MODEL_HAIKU:-claude-haiku-4-5@20251001}"
+      AGENT_MODEL_SONNET: "${AGENT_MODEL_SONNET:-claude-sonnet-4-6@20251031}"
+      AGENT_MODEL_GROK: "${AGENT_MODEL_GROK:-grok-4}"
     volumes:
       - ./vault:/vault
       - ./data:/data
+      - ./secrets:/secrets:ro
     depends_on:
       - couchdb
       - syncthing

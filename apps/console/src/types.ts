@@ -179,7 +179,7 @@ export type TaskCreateInput = {
   links?: string[];
 };
 
-export type HealthEntryType = "meal" | "workout" | "body" | "commitment";
+export type HealthEntryType = "meal" | "body" | "commitment";
 
 type HealthLogBase = {
   id: number;
@@ -207,19 +207,9 @@ export type HealthMealEntry = HealthLogBase & {
   notes: string | null;
 };
 
-export type HealthWorkoutEntry = HealthLogBase & {
-  type: "workout";
-  workoutType: string | null;
-  focus: string | null;
-  muscles: string | null;
-  description: string;
-  durationMinutes: number | null;
-  intensity: number | null;
-  energyBefore: number | null;
-  energyAfter: number | null;
-  performance: number | null;
-  notes: string | null;
-};
+export type SocialLevel = "alone" | "light" | "heavy";
+export type ActivityLevel = "sedentary" | "mixed" | "active";
+export type SunLevel = "none" | "some" | "lots";
 
 export type HealthBodyEntry = HealthLogBase & {
   type: "body";
@@ -231,10 +221,25 @@ export type HealthBodyEntry = HealthLogBase & {
   stress: number | null;
   hydration: number | null;
   gassiness: number | null;
+  focus: number | null;
+  social: SocialLevel | null;
+  activityLevel: ActivityLevel | null;
+  sunExposure: SunLevel | null;
+  sick: boolean | null;
+  alcohol: boolean | null;
+  marijuana: boolean | null;
   mood: string | null;
   pain: string | null;
   symptoms: string | null;
   weightLb: number | null;
+  notes: string | null;
+};
+
+export type HealthBowelEntry = {
+  id: number;
+  capturedAt: string;
+  loggedDate: string;
+  bristol: number;
   notes: string | null;
 };
 
@@ -252,7 +257,7 @@ export type HealthCommitmentEntry = {
   updatedAt: string;
 };
 
-export type HealthEntry = HealthMealEntry | HealthWorkoutEntry | HealthBodyEntry | HealthCommitmentEntry;
+export type HealthEntry = HealthMealEntry | HealthBodyEntry | HealthCommitmentEntry;
 
 export type HealthOverview = {
   generatedAt: string;

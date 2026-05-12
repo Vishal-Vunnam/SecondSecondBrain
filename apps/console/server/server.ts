@@ -20,6 +20,7 @@ import { routeShopping } from "./domains/shopping.js";
 import { routeTasks, syncTaskIndex } from "./domains/tasks.js";
 import { routeVault } from "./domains/vault.js";
 import { handleMcpRequest } from "./mcp.js";
+import { handleAgentChatRequest, handleAgentStatusRequest } from "./agent.js";
 
 async function probe(url: string) {
   try {
@@ -109,6 +110,16 @@ async function route(req: IncomingMessage, res: ServerResponse) {
 
   if (url.pathname === "/api/health/capture" && req.method === "POST") {
     await intakeHealth(req, res, { requireBearerToken: false });
+    return;
+  }
+
+  if (url.pathname === "/api/agent/chat" && req.method === "POST") {
+    await handleAgentChatRequest(req, res);
+    return;
+  }
+
+  if (url.pathname === "/api/agent/status" && req.method === "GET") {
+    await handleAgentStatusRequest(req, res);
     return;
   }
 

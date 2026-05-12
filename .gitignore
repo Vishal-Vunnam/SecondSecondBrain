@@ -11,6 +11,8 @@ apps/console/vite.config.js
 apps/console/vite.config.d.ts
 ops/brain-stack/.env
 ops/brain-stack/.anythingllm.env
+ops/brain-stack/secrets/*
+!ops/brain-stack/secrets/.gitkeep
 ops/brain-stack/data/
 ops/brain-stack/vault/**
 !ops/brain-stack/vault/summaries/

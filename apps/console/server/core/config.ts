@@ -22,6 +22,19 @@ export const authPassword = process.env.BRAIN_CONSOLE_PASSWORD ?? process.env.VI
 export const authSecret = process.env.BRAIN_CONSOLE_SESSION_SECRET ?? process.env.VISHAL_AI_SESSION_SECRET ?? authPassword;
 export const intakeToken = process.env.VISHAL_AI_INTAKE_TOKEN ?? "";
 export const mcpBearerToken = process.env.MCP_BEARER_TOKEN ?? "";
+export const vertexProject = process.env.GOOGLE_VERTEX_PROJECT ?? process.env.GCLOUD_PROJECT ?? "";
+export const vertexLocation = process.env.GOOGLE_VERTEX_LOCATION ?? "us-central1";
+export const xaiApiKey = process.env.XAI_API_KEY ?? "";
+export const agentDailyCap = Number(process.env.AGENT_DAILY_REQUEST_CAP ?? 500);
+export const agentDefaultModel = process.env.AGENT_DEFAULT_MODEL ?? "flash-lite";
+export const agentModelIds = {
+  "flash-lite": process.env.AGENT_MODEL_FLASH_LITE ?? "gemini-2.5-flash-lite",
+  flash: process.env.AGENT_MODEL_FLASH ?? "gemini-2.5-flash",
+  "gemini-pro": process.env.AGENT_MODEL_GEMINI_PRO ?? "gemini-2.5-pro",
+  haiku: process.env.AGENT_MODEL_HAIKU ?? "claude-haiku-4-5@20251001",
+  sonnet: process.env.AGENT_MODEL_SONNET ?? "claude-sonnet-4-6@20251031",
+  grok: process.env.AGENT_MODEL_GROK ?? "grok-4",
+};
 export const geminiApiKey = process.env.GEMINI_API_KEY ?? "";
 export const geminiTaskModel = process.env.GEMINI_TASK_MODEL ?? "gemini-2.5-flash";
 export const geminiHealthModel = process.env.GEMINI_HEALTH_MODEL ?? "gemini-2.5-flash-lite";

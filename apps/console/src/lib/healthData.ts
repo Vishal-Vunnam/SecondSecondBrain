@@ -1,4 +1,4 @@
-import type { HealthCaptureResponse, HealthCommitmentEntry, HealthEntry, HealthEntryType, HealthOverview } from "../types";
+import type { HealthBodyEntry, HealthBowelEntry, HealthCaptureResponse, HealthCommitmentEntry, HealthEntry, HealthEntryType, HealthOverview } from "../types";
 import { apiUrl } from "./api";
 
 async function parseJson<T>(response: Response): Promise<T> {
@@ -122,6 +122,73 @@ export async function loadHealthRhythm(days = 60) {
     credentials: "include",
   });
   return parseJson<{ bullets: string[]; generatedAt: string; days: number }>(response);
+}
+
+export type HealthCheckinPayload = Partial<{
+  sleepHours: number | null;
+  sleepQuality: number | null;
+  energy: number | null;
+  moodScore: number | null;
+  soreness: number | null;
+  stress: number | null;
+  focus: number | null;
+  social: string | null;
+  activityLevel: string | null;
+  sunExposure: string | null;
+  sick: boolean | null;
+  alcohol: boolean | null;
+  marijuana: boolean | null;
+  weightLb: number | null;
+  hydration: number | null;
+  notes: string | null;
+}>;
+
+export async function loadHealthCheckin(date?: string) {
+  const params = new URLSearchParams({ timezone: timezone() });
+  if (date) params.set("date", date);
+  const response = await fetch(apiUrl(`/api/health/checkin?${params.toString()}`), {
+    cache: "no-store",
+    credentials: "include",
+  });
+  return parseJson<{ date: string; entry: HealthBodyEntry | null }>(response);
+}
+
+export async function saveHealthCheckin(payload: HealthCheckinPayload & { date?: string }) {
+  const response = await fetch(apiUrl(`/api/health/checkin?timezone=${encodeURIComponent(timezone())}`), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(payload),
+  });
+  return parseJson<{ entry: HealthBodyEntry }>(response);
+}
+
+export async function loadHealthBowel(date?: string) {
+  const params = new URLSearchParams({ timezone: timezone() });
+  if (date) params.set("date", date);
+  const response = await fetch(apiUrl(`/api/health/bowel?${params.toString()}`), {
+    cache: "no-store",
+    credentials: "include",
+  });
+  return parseJson<{ date: string; entries: HealthBowelEntry[] }>(response);
+}
+
+export async function logHealthBowel(input: { bristol: number; date?: string; notes?: string | null }) {
+  const response = await fetch(apiUrl("/api/health/bowel"), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(input),
+  });
+  return parseJson<{ entry: HealthBowelEntry }>(response);
+}
+
+export async function deleteHealthBowel(id: number) {
+  const response = await fetch(apiUrl(`/api/health/bowel/${id}`), {
+    method: "DELETE",
+    credentials: "include",
+  });
+  return parseJson<{ deleted: true }>(response);
 }
 
 export async function captureHealthLog(text: string, date?: string) {

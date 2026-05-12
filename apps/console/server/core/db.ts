@@ -105,7 +105,19 @@ function migrate() {
       created_at TEXT NOT NULL
     );
 
-    CREATE INDEX IF NOT EXISTS idx_health_meals_logged_date ON health_meals(logged_date);
+    DROP TABLE IF EXISTS health_signals;
+
+    CREATE TABLE IF NOT EXISTS health_bowel (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      captured_at TEXT NOT NULL,
+      logged_date TEXT NOT NULL,
+      bristol INTEGER NOT NULL,
+      notes TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_health_bowel_logged_date ON health_bowel(logged_date);
+
+CREATE INDEX IF NOT EXISTS idx_health_meals_logged_date ON health_meals(logged_date);
     CREATE INDEX IF NOT EXISTS idx_health_workouts_logged_date ON health_workouts(logged_date);
     CREATE INDEX IF NOT EXISTS idx_health_body_logs_logged_date ON health_body_logs(logged_date);
     CREATE INDEX IF NOT EXISTS idx_health_commitments_status ON health_commitments(status);
@@ -191,6 +203,53 @@ function migrate() {
   ensureColumn("health_body_logs", "pain", "TEXT");
   ensureColumn("health_body_logs", "symptoms", "TEXT");
   ensureColumn("shopping_items", "link", "TEXT");
+
+  ensureColumn("health_body_logs", "focus", "INTEGER");
+  ensureColumn("health_body_logs", "social", "TEXT");
+  ensureColumn("health_body_logs", "activity_level", "TEXT");
+  ensureColumn("health_body_logs", "sun_exposure", "TEXT");
+  ensureColumn("health_body_logs", "sick", "INTEGER");
+  ensureColumn("health_body_logs", "alcohol", "INTEGER");
+  ensureColumn("health_body_logs", "marijuana", "INTEGER");
+
+  ensureColumn("workouts", "duration_minutes", "INTEGER");
+  ensureColumn("workouts", "intensity", "INTEGER");
+  ensureColumn("workouts", "energy_before", "INTEGER");
+  ensureColumn("workouts", "energy_after", "INTEGER");
+  ensureColumn("workouts", "performance", "INTEGER");
+  ensureColumn("workouts", "focus", "INTEGER");
+  ensureColumn("workouts", "notes", "TEXT");
+
+  const healthWorkoutsExists = db
+    .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='health_workouts'`)
+    .get();
+  if (healthWorkoutsExists) {
+    db.exec(`
+      INSERT INTO workouts (
+        date, name, description, status, planned, recurrence_id,
+        duration_minutes, intensity, energy_before, energy_after, performance, focus, notes,
+        created_at, updated_at
+      )
+      SELECT
+        logged_date,
+        COALESCE(NULLIF(TRIM(summary), ''), 'Workout'),
+        description,
+        'done',
+        0,
+        NULL,
+        duration_minutes,
+        intensity,
+        energy_before,
+        energy_after,
+        performance,
+        CASE WHEN focus GLOB '-?[0-9]*' OR focus GLOB '[0-9]*' THEN CAST(focus AS INTEGER) ELSE NULL END,
+        notes,
+        created_at,
+        updated_at
+      FROM health_workouts;
+      DROP TABLE health_workouts;
+    `);
+  }
 }
 
 migrate();

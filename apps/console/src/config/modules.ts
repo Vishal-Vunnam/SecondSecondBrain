@@ -27,9 +27,9 @@ export const appModules: AppModule[] = [
   },
   {
     id: "terminal",
-    title: "vishalbot",
-    shortTitle: "Agent",
-    description: "Claude Code agent over your vault, tasks, health, and shopping.",
+    title: "Terminal",
+    shortTitle: "Terminal",
+    description: "Web terminal into the brain tmux session.",
     group: "knowledge",
     status: "active",
   },

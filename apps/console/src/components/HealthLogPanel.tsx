@@ -1,6 +1,7 @@
-import { Dumbbell, HeartPulse, LoaderCircle, Send, Utensils, X } from "lucide-react";
-import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import { type HealthCalendarDay, captureHealthLog, loadHealthCalendar } from "../lib/healthData";
+import { Dumbbell, HeartPulse, LoaderCircle, Utensils, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { type HealthCalendarDay, loadHealthCalendar } from "../lib/healthData";
+import { DailyCheckinCard } from "./DailyCheckinCard";
 
 type Toast = { kind: "info" | "error"; text: string };
 
@@ -45,9 +46,17 @@ function DayStrip({ days, selectedDate, today, onSelect }: {
   today: string;
   onSelect: (date: string) => void;
 }) {
+  const stripRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!selectedDate || !stripRef.current) return;
+    const el = stripRef.current.querySelector<HTMLButtonElement>(`[data-date="${selectedDate}"]`);
+    if (el) el.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+  }, [selectedDate, days]);
+
   if (!days.length) return null;
   return (
-    <div className="hlog-strip" role="listbox" aria-label="Days">
+    <div className="hlog-strip" ref={stripRef} role="listbox" aria-label="Days">
       {days.map((d) => {
         const isSelected = d.date === selectedDate;
         const isToday = d.date === today;
@@ -56,6 +65,7 @@ function DayStrip({ days, selectedDate, today, onSelect }: {
         return (
           <button
             key={d.date}
+            data-date={d.date}
             type="button"
             role="option"
             aria-selected={isSelected}
@@ -84,8 +94,6 @@ export function HealthLogPanel() {
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
-  const [input, setInput] = useState("");
-  const [sending, setSending] = useState(false);
 
   const refresh = useCallback(async (keepSelection = false) => {
     try {
@@ -115,25 +123,6 @@ export function HealthLogPanel() {
     const days = months.find((m) => m.key === key)?.days ?? [];
     const inMonth = days.find((d) => d.date === today);
     setSelectedDate(inMonth ? today : days[days.length - 1]?.date ?? null);
-  }
-
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    const text = input.trim();
-    if (!text || sending) return;
-    setInput("");
-    setSending(true);
-    setToast(null);
-    try {
-      const result = await captureHealthLog(text, selectedDate ?? undefined);
-      setToast({ kind: "info", text: result.confirmation });
-      await refresh(true);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Could not log entry";
-      setToast({ kind: "error", text: msg });
-    } finally {
-      setSending(false);
-    }
   }
 
   return (
@@ -184,29 +173,14 @@ export function HealthLogPanel() {
           </div>
         )}
 
-        <form className="hlog-form" onSubmit={submit}>
-          {isBackfill && <div className="hlog-backfill-badge">Logging for {selectedDate ? formatDate(selectedDate) : ""}</div>}
-          {toast && (
-            <div className={`hlog-toast hlog-toast-${toast.kind}`} role="status">
-              <p>{toast.text}</p>
-              <button type="button" aria-label="Dismiss" onClick={() => setToast(null)}><X size={14} /></button>
-            </div>
-          )}
-          <div className="hlog-input-row">
-            <textarea
-              className="hlog-input"
-              disabled={sending}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(e as unknown as FormEvent); } }}
-              placeholder={isBackfill ? "What did you eat, do, and feel that day?" : "Slept 7h, eggs for breakfast, lifted chest 45 min, energy 4/5…"}
-              rows={5}
-              value={input}
-            />
-            <button className="hlog-send" disabled={sending || !input.trim()} type="submit">
-              {sending ? <LoaderCircle className="spin" size={18} /> : <Send size={18} />}
-            </button>
+        {toast && (
+          <div className={`hlog-toast hlog-toast-${toast.kind}`} role="status">
+            <p>{toast.text}</p>
+            <button type="button" aria-label="Dismiss" onClick={() => setToast(null)}><X size={14} /></button>
           </div>
-        </form>
+        )}
+
+        {selectedDate && <DailyCheckinCard date={selectedDate} />}
       </div>
     </section>
   );

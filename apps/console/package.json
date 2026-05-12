@@ -11,12 +11,17 @@
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {
+    "@ai-sdk/google-vertex": "^4.0.126",
+    "@ai-sdk/react": "^3.0.179",
+    "@ai-sdk/xai": "^3.0.89",
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "ai": "^6.0.177",
     "lucide-react": "^0.468.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-markdown": "^10.1.0",
-    "remark-gfm": "^4.0.1"
+    "remark-gfm": "^4.0.1",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^25.6.2",
