@@ -15,6 +15,9 @@ ENV PORT=80
 ENV PUBLIC_ROOT=/app/public
 ENV VAULT_ROOT=/vault
 
+COPY apps/console/package*.json ./
+RUN npm ci --omit=dev --ignore-scripts
+
 COPY --from=build /app/dist /app/public
 COPY --from=build /app/dist-server /app/dist-server
 
