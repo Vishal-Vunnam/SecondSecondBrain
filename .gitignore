@@ -3,6 +3,7 @@ node_modules/
 dist/
 dist-server/
 *.tsbuildinfo
+apps/console/.env
 apps/console/node_modules/
 apps/console/dist/
 apps/console/dist-server/

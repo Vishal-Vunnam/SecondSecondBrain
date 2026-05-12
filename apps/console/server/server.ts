@@ -19,6 +19,7 @@ import { routeHome } from "./domains/home.js";
 import { routeShopping } from "./domains/shopping.js";
 import { routeTasks, syncTaskIndex } from "./domains/tasks.js";
 import { routeVault } from "./domains/vault.js";
+import { handleMcpRequest } from "./mcp.js";
 
 async function probe(url: string) {
   try {
@@ -89,6 +90,11 @@ async function route(req: IncomingMessage, res: ServerResponse) {
 
   if (url.pathname === "/api/intake/health" && req.method === "POST") {
     await intakeHealth(req, res, { requireBearerToken: true });
+    return;
+  }
+
+  if (url.pathname === "/api/mcp") {
+    await handleMcpRequest(req, res);
     return;
   }
 

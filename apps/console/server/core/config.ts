@@ -21,6 +21,7 @@ export const newsFeedUrl = process.env.NEWS_RSS_URL ?? "https://feeds.bbci.co.uk
 export const authPassword = process.env.BRAIN_CONSOLE_PASSWORD ?? process.env.VISHAL_AI_PASSWORD ?? "";
 export const authSecret = process.env.BRAIN_CONSOLE_SESSION_SECRET ?? process.env.VISHAL_AI_SESSION_SECRET ?? authPassword;
 export const intakeToken = process.env.VISHAL_AI_INTAKE_TOKEN ?? "";
+export const mcpBearerToken = process.env.MCP_BEARER_TOKEN ?? "";
 export const geminiApiKey = process.env.GEMINI_API_KEY ?? "";
 export const geminiTaskModel = process.env.GEMINI_TASK_MODEL ?? "gemini-2.5-flash";
 export const geminiHealthModel = process.env.GEMINI_HEALTH_MODEL ?? "gemini-2.5-flash-lite";

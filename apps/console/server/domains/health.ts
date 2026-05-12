@@ -638,7 +638,7 @@ function updateHealthLogEntry(type: Exclude<HealthEntryType, "commitment">, id: 
   return getHealthEntry(type, id);
 }
 
-function listRecentHealthEntries(limit = 20) {
+export function listRecentHealthEntries(limit = 20) {
   const mealRows = db.prepare("SELECT * FROM health_meals ORDER BY captured_at DESC, id DESC LIMIT ?").all(limit) as Record<string, unknown>[];
   const workoutRows = db.prepare("SELECT * FROM health_workouts ORDER BY captured_at DESC, id DESC LIMIT ?").all(limit) as Record<string, unknown>[];
   const bodyRows = db.prepare("SELECT * FROM health_body_logs ORDER BY captured_at DESC, id DESC LIMIT ?").all(limit) as Record<string, unknown>[];
@@ -1337,6 +1337,18 @@ function writeParsedHealthIntake(parsed: ParsedHealthIntake, context: { captured
     if (entry) created.push(entry);
   }
   return created;
+}
+
+export async function captureHealthIntake(input: { text: string; source?: string; timezone?: string; capturedAt?: string }) {
+  const text = input.text.trim();
+  if (!text) throw Object.assign(new Error("Health intake text cannot be empty"), { statusCode: 400 });
+  const source = cleanOptionalText(input.source) || "agent";
+  const timezone = cleanOptionalText(input.timezone) || "America/New_York";
+  const capturedAt = normalizeCapturedAt(input.capturedAt);
+  const loggedDate = dateKeyInTimezone(new Date(capturedAt), timezone);
+  const parsed = await parseHealthWithGemini({ text, source, timezone });
+  const entries = writeParsedHealthIntake(parsed, { capturedAt, loggedDate, source, rawText: text });
+  return { confirmation: parsed.confirmation, route: parsed.route, entries };
 }
 
 export async function intakeHealth(req: IncomingMessage, res: ServerResponse, options: { requireBearerToken: boolean }) {
