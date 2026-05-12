@@ -14,12 +14,12 @@ if [[ -n "$AGENT_COMMAND" ]]; then
   exec $AGENT_COMMAND
 fi
 
-if command -v codex >/dev/null 2>&1; then
-  exec codex
-fi
-
 if command -v claude >/dev/null 2>&1; then
   exec claude
+fi
+
+if command -v codex >/dev/null 2>&1; then
+  exec codex
 fi
 
 cat <<MSG
