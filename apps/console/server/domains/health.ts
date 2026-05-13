@@ -1193,7 +1193,7 @@ async function parseHealthWithGemini(input: { text: string; source: string; time
                   gassiness: { type: "INTEGER" },
                   notes: { type: "STRING" },
                 },
-                required: ["description"],
+                required: ["description", "caloriesEstimate", "proteinGEstimate", "carbsGEstimate", "fatGEstimate", "fiberGEstimate"],
               },
             },
             bodyLogs: {
@@ -1254,6 +1254,7 @@ async function parseHealthWithGemini(input: { text: string; source: string; time
     throw Object.assign(new Error("Gemini returned no health JSON"), { statusCode: 502 });
   }
 
+  console.log("[health intake] gemini raw response:", text);
   return parseGeminiHealth(text);
 }
 

@@ -37,7 +37,7 @@ export const agentModelIds = {
 };
 export const geminiApiKey = process.env.GEMINI_API_KEY ?? "";
 export const geminiTaskModel = process.env.GEMINI_TASK_MODEL ?? "gemini-2.5-flash";
-export const geminiHealthModel = process.env.GEMINI_HEALTH_MODEL ?? "gemini-2.5-flash-lite";
+export const geminiHealthModel = process.env.GEMINI_HEALTH_MODEL ?? "gemini-2.5-pro";
 export const healthDbPath = path.resolve(process.env.VISHAL_AI_DB_PATH ?? path.join(process.cwd(), "data/vishal-ai.db"));
 export const authCookieName = "vishal_ai_session";
 export const authMaxAgeSeconds = 60 * 60 * 24 * 14;
