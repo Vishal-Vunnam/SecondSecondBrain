@@ -244,6 +244,9 @@ export type HealthMealEntry = HealthLogBase & {
   mealType: string | null;
   proteinGEstimate: number | null;
   caloriesEstimate: number | null;
+  carbsGEstimate: number | null;
+  fatGEstimate: number | null;
+  fiberGEstimate: number | null;
   hunger: number | null;
   fullness: number | null;
   energy: number | null;

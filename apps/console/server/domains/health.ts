@@ -14,6 +14,9 @@ type HealthMealDraft = {
   mealType?: string;
   proteinGEstimate?: number | null;
   caloriesEstimate?: number | null;
+  carbsGEstimate?: number | null;
+  fatGEstimate?: number | null;
+  fiberGEstimate?: number | null;
   hunger?: number | null;
   fullness?: number | null;
   energy?: number | null;
@@ -84,6 +87,9 @@ type HealthMealEntry = HealthBaseEntry & {
   mealType: string | null;
   proteinGEstimate: number | null;
   caloriesEstimate: number | null;
+  carbsGEstimate: number | null;
+  fatGEstimate: number | null;
+  fiberGEstimate: number | null;
   summary: string | null;
   hunger: number | null;
   fullness: number | null;
@@ -259,6 +265,9 @@ function mapMeal(row: Record<string, unknown>): HealthMealEntry {
     mealType: rowText(row, "meal_type"),
     proteinGEstimate: rowNumber(row, "protein_g_estimate"),
     caloriesEstimate: rowNumber(row, "calories_estimate"),
+    carbsGEstimate: rowNumber(row, "carbs_g_estimate"),
+    fatGEstimate: rowNumber(row, "fat_g_estimate"),
+    fiberGEstimate: rowNumber(row, "fiber_g_estimate"),
     hunger: rowNumber(row, "hunger"),
     fullness: rowNumber(row, "fullness"),
     energy: rowNumber(row, "energy"),
@@ -351,8 +360,9 @@ function insertHealthMeal(input: HealthMealDraft, context: { capturedAt: string;
     .prepare(
       `INSERT INTO health_meals (
         captured_at, logged_date, source, summary, description, meal_type, protein_g_estimate, calories_estimate,
+        carbs_g_estimate, fat_g_estimate, fiber_g_estimate,
         hunger, fullness, energy, digestion, gassiness, notes, raw_text, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       context.capturedAt,
@@ -363,6 +373,9 @@ function insertHealthMeal(input: HealthMealDraft, context: { capturedAt: string;
       cleanMealType(input.mealType) || null,
       cleanOptionalNumber(input.proteinGEstimate),
       cleanOptionalNumber(input.caloriesEstimate),
+      cleanOptionalNumber(input.carbsGEstimate),
+      cleanOptionalNumber(input.fatGEstimate),
+      cleanOptionalNumber(input.fiberGEstimate),
       cleanScore(input.hunger),
       cleanScore(input.fullness),
       cleanScore(input.energy),
@@ -523,6 +536,7 @@ function updateHealthLogEntry(type: Exclude<HealthEntryType, "commitment">, id: 
       .prepare(
         `UPDATE health_meals
          SET captured_at = ?, logged_date = ?, summary = ?, description = ?, meal_type = ?, protein_g_estimate = ?, calories_estimate = ?,
+             carbs_g_estimate = ?, fat_g_estimate = ?, fiber_g_estimate = ?,
              hunger = ?, fullness = ?, energy = ?, digestion = ?, gassiness = ?, notes = ?, updated_at = ?
          WHERE id = ?`,
       )
@@ -534,6 +548,9 @@ function updateHealthLogEntry(type: Exclude<HealthEntryType, "commitment">, id: 
         "mealType" in input ? (cleanMealType(input.mealType) || null) : meal.mealType,
         "proteinGEstimate" in input ? cleanOptionalNumber(input.proteinGEstimate) : meal.proteinGEstimate,
         "caloriesEstimate" in input ? cleanOptionalNumber(input.caloriesEstimate) : meal.caloriesEstimate,
+        "carbsGEstimate" in input ? cleanOptionalNumber(input.carbsGEstimate) : meal.carbsGEstimate,
+        "fatGEstimate" in input ? cleanOptionalNumber(input.fatGEstimate) : meal.fatGEstimate,
+        "fiberGEstimate" in input ? cleanOptionalNumber(input.fiberGEstimate) : meal.fiberGEstimate,
         "hunger" in input ? cleanScore(input.hunger) : meal.hunger,
         "fullness" in input ? cleanScore(input.fullness) : meal.fullness,
         "energy" in input ? cleanScore(input.energy) : meal.energy,
@@ -1012,7 +1029,8 @@ function buildHealthIntakePrompt(input: { text: string; source: string; timezone
     "- summary: one short neutral summary for each entry when useful.",
     "- notes: side context, caveats, possible relationships stated by the user, and details that should not be lost.",
     "- Preserve user-stated relationships without diagnosing them; e.g. knee tightness because hips felt tight.",
-    "- Estimates are optional and should be null or omitted when uncertain.",
+    "- For meals, ALWAYS provide best-effort numeric estimates for caloriesEstimate, proteinGEstimate, carbsGEstimate, fatGEstimate, and fiberGEstimate based on typical portion sizes for the foods described. Use your knowledge of common dishes. It is fine to be approximate — round to the nearest 5g or 10 kcal. Only leave a macro null if the food is truly unknown (e.g. 'something I ate'). When in doubt, estimate.",
+    "- If the user describes multiple meals/snacks in one message, return one meals[] entry per distinct meal so macros are itemized.",
     "- Scores are 1-5 where 1 is low and 5 is high.",
     "- Do not moralize food, diagnose, prescribe treatment, or use rigid diet language.",
     "- If a category is absent, return an empty array for it.",
@@ -1045,6 +1063,9 @@ function normalizeHealthDrafts(parsed: Record<string, unknown>): ParsedHealthInt
         .filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null && typeof item.description === "string" && item.description.trim().length > 0)
         .map((item) => ({
           caloriesEstimate: cleanOptionalNumber(item.caloriesEstimate),
+          carbsGEstimate: cleanOptionalNumber(item.carbsGEstimate),
+          fatGEstimate: cleanOptionalNumber(item.fatGEstimate),
+          fiberGEstimate: cleanOptionalNumber(item.fiberGEstimate),
           description: cleanOptionalText(item.description),
           digestion: cleanScore(item.digestion),
           energy: cleanScore(item.energy),
@@ -1158,6 +1179,9 @@ async function parseHealthWithGemini(input: { text: string; source: string; time
                   mealType: { type: "STRING" },
                   proteinGEstimate: { type: "NUMBER" },
                   caloriesEstimate: { type: "NUMBER" },
+                  carbsGEstimate: { type: "NUMBER" },
+                  fatGEstimate: { type: "NUMBER" },
+                  fiberGEstimate: { type: "NUMBER" },
                   hunger: { type: "INTEGER" },
                   fullness: { type: "INTEGER" },
                   energy: { type: "INTEGER" },

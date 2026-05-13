@@ -365,8 +365,11 @@ export function DailyCheckinCard({ date }: DailyCheckinCardProps = {}) {
             {meals.map((m) => {
               const parts: string[] = [];
               if (m.mealType) parts.push(m.mealType);
-              if (m.proteinGEstimate !== null && m.proteinGEstimate !== undefined) parts.push(`${Math.round(m.proteinGEstimate)}g protein`);
               if (m.caloriesEstimate !== null && m.caloriesEstimate !== undefined) parts.push(`${Math.round(m.caloriesEstimate)} kcal`);
+              if (m.proteinGEstimate !== null && m.proteinGEstimate !== undefined) parts.push(`P ${Math.round(m.proteinGEstimate)}g`);
+              if (m.carbsGEstimate !== null && m.carbsGEstimate !== undefined) parts.push(`C ${Math.round(m.carbsGEstimate)}g`);
+              if (m.fatGEstimate !== null && m.fatGEstimate !== undefined) parts.push(`F ${Math.round(m.fatGEstimate)}g`);
+              if (m.fiberGEstimate !== null && m.fiberGEstimate !== undefined) parts.push(`Fb ${Math.round(m.fiberGEstimate)}g`);
               return (
                 <li key={m.id}>
                   <div>

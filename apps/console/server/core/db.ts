@@ -231,6 +231,9 @@ CREATE INDEX IF NOT EXISTS idx_health_meals_logged_date ON health_meals(logged_d
   ensureColumn("health_meals", "hunger", "INTEGER");
   ensureColumn("health_meals", "summary", "TEXT");
   ensureColumn("health_meals", "gassiness", "INTEGER");
+  ensureColumn("health_meals", "carbs_g_estimate", "REAL");
+  ensureColumn("health_meals", "fat_g_estimate", "REAL");
+  ensureColumn("health_meals", "fiber_g_estimate", "REAL");
   ensureColumn("health_workouts", "summary", "TEXT");
   ensureColumn("health_workouts", "workout_type", "TEXT");
   ensureColumn("health_workouts", "muscles", "TEXT");
