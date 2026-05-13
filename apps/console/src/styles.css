@@ -1202,48 +1202,107 @@ button { -webkit-tap-highlight-color: transparent; }
 
 .checkin-food-list li {
   display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.checkin-food-list li.is-expanded {
+  border-color: var(--accent);
+}
+
+.checkin-meal-row {
+  display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 8px 10px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
 }
 
-.checkin-food-list li > div {
+.checkin-meal-summary {
+  appearance: none;
+  flex: 1;
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: 2px;
+  padding: 8px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
   min-width: 0;
 }
 
-.checkin-food-list strong {
+.checkin-meal-summary strong {
   font-size: 13px;
   font-weight: 600;
-  color: var(--ink);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  max-width: 100%;
 }
 
-.checkin-food-list small {
+.checkin-meal-summary small {
   font-size: 11px;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
 
-.checkin-food-list button {
+.checkin-meal-delete {
   appearance: none;
   border: 0;
   background: transparent;
   color: var(--muted);
   cursor: pointer;
   display: inline-flex;
-  padding: 4px;
+  padding: 8px;
 }
 
-.checkin-food-list button:hover {
+.checkin-meal-delete:hover {
   color: var(--danger, #c0392b);
+}
+
+.checkin-meal-edit {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 10px;
+  border-top: 1px solid var(--line);
+  background: color-mix(in oklab, var(--ink) 3%, transparent);
+}
+
+.checkin-meal-edit label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.checkin-meal-edit-wide {
+  grid-column: 1 / -1;
+}
+
+.checkin-meal-edit input,
+.checkin-meal-edit select {
+  appearance: none;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface, transparent);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.checkin-meal-edit input:focus,
+.checkin-meal-edit select:focus {
+  outline: none;
+  border-color: var(--accent);
 }
 
 .checkin-tap-log {

@@ -20,6 +20,7 @@ import {
   loadHealthMeals,
   logHealthMeal,
   saveHealthCheckin,
+  updateHealthEntry,
 } from "../lib/healthData";
 import type { ActivityLevel, HealthBodyEntry, HealthMealEntry, SocialLevel, SunLevel } from "../types";
 
@@ -105,6 +106,7 @@ type DailyCheckinCardProps = {
 export function DailyCheckinCard({ date }: DailyCheckinCardProps = {}) {
   const [entry, setEntry] = useState<HealthBodyEntry | null>(null);
   const [meals, setMeals] = useState<HealthMealEntry[]>([]);
+  const [expandedMealId, setExpandedMealId] = useState<number | null>(null);
   const [mealText, setMealText] = useState("");
   const [mealLogging, setMealLogging] = useState(false);
   const [mealError, setMealError] = useState<string | null>(null);
@@ -158,6 +160,18 @@ export function DailyCheckinCard({ date }: DailyCheckinCardProps = {}) {
       await deleteHealthMeal(id);
     } catch {
       setMealError("Could not delete meal");
+    }
+  }, []);
+
+  const patchMeal = useCallback(async (id: number, patch: Partial<HealthMealEntry>) => {
+    setMeals((prev) => prev.map((m) => (m.id === id ? { ...m, ...patch } : m)));
+    try {
+      const result = await updateHealthEntry("meal", id, patch as Record<string, unknown>);
+      if (result.entry.type === "meal") {
+        setMeals((prev) => prev.map((m) => (m.id === id ? result.entry as HealthMealEntry : m)));
+      }
+    } catch {
+      setMealError("Could not update meal");
     }
   }, []);
 
@@ -370,15 +384,78 @@ export function DailyCheckinCard({ date }: DailyCheckinCardProps = {}) {
               if (m.carbsGEstimate !== null && m.carbsGEstimate !== undefined) parts.push(`C ${Math.round(m.carbsGEstimate)}g`);
               if (m.fatGEstimate !== null && m.fatGEstimate !== undefined) parts.push(`F ${Math.round(m.fatGEstimate)}g`);
               if (m.fiberGEstimate !== null && m.fiberGEstimate !== undefined) parts.push(`Fb ${Math.round(m.fiberGEstimate)}g`);
+              const isExpanded = expandedMealId === m.id;
               return (
-                <li key={m.id}>
-                  <div>
-                    <strong>{m.summary || m.description}</strong>
-                    {parts.length > 0 && <small>{parts.join(" · ")}</small>}
+                <li className={isExpanded ? "is-expanded" : ""} key={m.id}>
+                  <div className="checkin-meal-row">
+                    <button
+                      aria-expanded={isExpanded}
+                      className="checkin-meal-summary"
+                      onClick={() => setExpandedMealId((current) => (current === m.id ? null : m.id))}
+                      type="button"
+                    >
+                      <strong>{m.summary || m.description}</strong>
+                      {parts.length > 0 && <small>{parts.join(" · ")}</small>}
+                    </button>
+                    <button aria-label="Remove meal" className="checkin-meal-delete" onClick={() => removeMeal(m.id)} type="button">
+                      <X size={12} />
+                    </button>
                   </div>
-                  <button aria-label="Remove meal" onClick={() => removeMeal(m.id)} type="button">
-                    <X size={12} />
-                  </button>
+                  {isExpanded && (
+                    <div className="checkin-meal-edit">
+                      <label>
+                        <span>Type</span>
+                        <select
+                          defaultValue={m.mealType ?? ""}
+                          onChange={(e) => patchMeal(m.id, { mealType: e.target.value || null })}
+                        >
+                          <option value="">—</option>
+                          <option value="breakfast">breakfast</option>
+                          <option value="lunch">lunch</option>
+                          <option value="dinner">dinner</option>
+                          <option value="snack">snack</option>
+                          <option value="drink">drink</option>
+                        </select>
+                      </label>
+                      {([
+                        ["Calories", "caloriesEstimate"],
+                        ["Protein (g)", "proteinGEstimate"],
+                        ["Carbs (g)", "carbsGEstimate"],
+                        ["Fat (g)", "fatGEstimate"],
+                        ["Fiber (g)", "fiberGEstimate"],
+                      ] as const).map(([label, key]) => (
+                        <label key={key}>
+                          <span>{label}</span>
+                          <input
+                            defaultValue={m[key] ?? ""}
+                            inputMode="decimal"
+                            key={`${m.id}-${key}-${m[key] ?? ""}`}
+                            onBlur={(e) => {
+                              const trimmed = e.target.value.trim();
+                              const next = trimmed === "" ? null : Number(trimmed);
+                              if (next === m[key]) return;
+                              patchMeal(m.id, { [key]: next } as Partial<HealthMealEntry>);
+                            }}
+                            placeholder="—"
+                            step="any"
+                            type="number"
+                          />
+                        </label>
+                      ))}
+                      <label className="checkin-meal-edit-wide">
+                        <span>Description</span>
+                        <input
+                          defaultValue={m.description}
+                          key={`${m.id}-desc-${m.description}`}
+                          onBlur={(e) => {
+                            const next = e.target.value.trim();
+                            if (next && next !== m.description) patchMeal(m.id, { description: next });
+                          }}
+                          type="text"
+                        />
+                      </label>
+                    </div>
+                  )}
                 </li>
               );
             })}
