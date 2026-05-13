@@ -1,172 +1,242 @@
-import { ArrowRight, CalendarDays, CloudSun, Newspaper, RefreshCw } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import { appModules } from "../config/modules";
-import { loadNewsSummary, loadWeatherSummary } from "../lib/home";
-import type { AppModuleId, NewsSummary, ServiceKey, ServiceStatus, WeatherSummary } from "../types";
+import { ArrowUpRight, Bookmark, BookmarkCheck, CalendarDays, Check, EyeOff, RefreshCw, Settings } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { loadFeed, recordFeedInteraction, refreshFeed } from "../lib/feed";
+import { loadTasks, updateTaskStatus } from "../lib/tasks";
+import type { AppModuleId, FeedItem, FeedResponse, TaskItem } from "../types";
+import { FeedSettings } from "./FeedSettings";
 
 type HomePanelProps = {
-  noteCount: number;
   onSelectModule: (module: AppModuleId) => void;
-  statuses: Record<ServiceKey, ServiceStatus>;
 };
 
-function formatTemperature(value: number | null) {
-  return value === null ? "--" : `${Math.round(value)}°`;
-}
-
-function formatPublishedAt(value: string | null) {
-  if (!value) return "Recent";
+function formatRelative(value: string | null) {
+  if (!value) return "";
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Recent";
-  return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit", month: "short", day: "numeric" }).format(date);
+  if (Number.isNaN(date.getTime())) return "";
+  const diffMs = Date.now() - date.getTime();
+  const minutes = Math.round(diffMs / 60_000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(date);
 }
 
-export function HomePanel({ noteCount, onSelectModule, statuses }: HomePanelProps) {
-  const [weather, setWeather] = useState<WeatherSummary | null>(null);
-  const [weatherError, setWeatherError] = useState<string | null>(null);
-  const [news, setNews] = useState<NewsSummary | null>(null);
-  const [newsError, setNewsError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+function formatTaskDue(value: string | null) {
+  if (!value) return null;
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(date);
+}
+
+export function HomePanel({ onSelectModule }: HomePanelProps) {
+  const [feed, setFeed] = useState<FeedResponse | null>(null);
+  const [feedError, setFeedError] = useState<string | null>(null);
+  const [feedLoading, setFeedLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [tasks, setTasks] = useState<TaskItem[]>([]);
+  const [tasksError, setTasksError] = useState<string | null>(null);
+  const [hidden, setHidden] = useState<Set<string>>(new Set());
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const now = useMemo(() => new Date(), []);
   const dateLabel = new Intl.DateTimeFormat(undefined, { weekday: "long", month: "long", day: "numeric" }).format(now);
   const yearLabel = new Intl.DateTimeFormat(undefined, { year: "numeric" }).format(now);
-  const onlineServices = Object.values(statuses).filter((status) => status === "online").length;
-  const activeModules = appModules.filter((module) => module.status === "active" && module.id !== "home");
 
-  useEffect(() => {
-    let active = true;
-
-    async function loadHome() {
-      setLoading(true);
-      const [weatherResult, newsResult] = await Promise.allSettled([loadWeatherSummary(), loadNewsSummary()]);
-
-      if (!active) return;
-
-      if (weatherResult.status === "fulfilled") {
-        setWeather(weatherResult.value);
-        setWeatherError(null);
-      } else {
-        setWeather(null);
-        setWeatherError(weatherResult.reason instanceof Error ? weatherResult.reason.message : "Weather unavailable");
-      }
-
-      if (newsResult.status === "fulfilled") {
-        setNews(newsResult.value);
-        setNewsError(null);
-      } else {
-        setNews(null);
-        setNewsError(newsResult.reason instanceof Error ? newsResult.reason.message : "News unavailable");
-      }
-
-      setLoading(false);
+  const fetchFeed = useCallback(async () => {
+    try {
+      const response = await loadFeed();
+      setFeed(response);
+      setFeedError(null);
+    } catch (error) {
+      setFeedError(error instanceof Error ? error.message : "Feed unavailable");
+    } finally {
+      setFeedLoading(false);
     }
-
-    loadHome();
-    return () => {
-      active = false;
-    };
   }, []);
 
+  const fetchTasks = useCallback(async () => {
+    try {
+      const response = await loadTasks();
+      setTasks(response.tasks);
+      setTasksError(null);
+    } catch (error) {
+      setTasksError(error instanceof Error ? error.message : "Tasks unavailable");
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchFeed();
+    fetchTasks();
+  }, [fetchFeed, fetchTasks]);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await refreshFeed();
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      await fetchFeed();
+    } catch (error) {
+      setFeedError(error instanceof Error ? error.message : "Refresh failed");
+    } finally {
+      setRefreshing(false);
+    }
+  }, [fetchFeed]);
+
+  const handleOpen = useCallback((item: FeedItem) => {
+    recordFeedInteraction(item.id, "opened", feed?.profile.id).catch(() => undefined);
+  }, [feed?.profile.id]);
+
+  const handleSave = useCallback((item: FeedItem) => {
+    recordFeedInteraction(item.id, "saved", feed?.profile.id).catch(() => undefined);
+    setFeed((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        items: current.items.map((existing) =>
+          existing.id === item.id ? { ...existing, interaction: "saved" } : existing,
+        ),
+      };
+    });
+  }, [feed?.profile.id]);
+
+  const handleDismiss = useCallback((item: FeedItem) => {
+    setHidden((current) => new Set(current).add(item.id));
+    recordFeedInteraction(item.id, "dismissed", feed?.profile.id).catch(() => undefined);
+  }, [feed?.profile.id]);
+
+  const toggleTask = useCallback(async (task: TaskItem) => {
+    const next = task.status === "done" ? "todo" : "done";
+    try {
+      await updateTaskStatus(task.path, next);
+      setTasks((current) => current.map((t) => (t.path === task.path ? { ...t, status: next } : t)));
+    } catch (error) {
+      setTasksError(error instanceof Error ? error.message : "Could not update task");
+    }
+  }, []);
+
+  const openTasks = tasks.filter((task) => task.status !== "done").slice(0, 12);
+  const visibleItems = (feed?.items ?? []).filter((item) => !hidden.has(item.id));
+
   return (
-    <section className="home-panel" aria-label="Home">
-      <div className="home-hero">
+    <section className="feed-panel" aria-label="Home">
+      <header className="feed-hero">
         <div>
           <span>{yearLabel}</span>
           <h3>{dateLabel}</h3>
-          <p>Vishalbot is useful in proportion to how much Vishal uses it.</p>
         </div>
         <div className="date-card" aria-label="Today">
           <CalendarDays size={18} />
           <strong>{now.getDate()}</strong>
           <span>{now.toLocaleString(undefined, { month: "short" })}</span>
         </div>
-      </div>
+      </header>
 
-      <div className="home-grid">
-        <article className="home-card weather-card">
-          <div className="home-card-heading">
+      <div className="feed-layout">
+        <main className="feed-main">
+          <div className="feed-main-heading">
             <div>
-              <CloudSun size={18} />
-              <span>Weather</span>
+              <h4>Feed</h4>
+              <small>
+                {feed?.lastPolledAt ? `Updated ${formatRelative(feed.lastPolledAt)}` : "Loading"}
+                {feed?.profile?.name ? ` · ${feed.profile.name}` : ""}
+              </small>
             </div>
-            {loading && <RefreshCw className="spin" size={14} />}
-          </div>
-          {weather ? (
-            <div className="weather-body">
-              <strong>{formatTemperature(weather.temperatureF)}</strong>
-              <div>
-                <span>{weather.location}</span>
-                <p>{weather.condition}</p>
-                <small>
-                  Feels {formatTemperature(weather.feelsLikeF)} · Wind {weather.windMph === null ? "--" : `${Math.round(weather.windMph)} mph`}
-                </small>
-              </div>
-            </div>
-          ) : (
-            <p className="home-muted">{weatherError ?? "Loading local weather"}</p>
-          )}
-        </article>
-
-        <article className="home-card stats-card">
-          <div className="home-card-heading">
-            <div>
-              <span>System</span>
-            </div>
-          </div>
-          <div className="stat-grid">
-            <div>
-              <strong>{onlineServices}/4</strong>
-              <span>services online</span>
-            </div>
-            <div>
-              <strong>{noteCount}</strong>
-              <span>visible notes here</span>
-            </div>
-          </div>
-        </article>
-
-        <article className="home-card news-card">
-          <div className="home-card-heading">
-            <div>
-              <Newspaper size={18} />
-              <span>Brief</span>
-            </div>
-            {news && <small>{news.source}</small>}
-          </div>
-          {news?.items.length ? (
-            <div className="news-list">
-              {news.items.slice(0, 5).map((item) => (
-                <a href={item.url} key={item.url} rel="noreferrer" target="_blank">
-                  <span>{item.title}</span>
-                  <small>{formatPublishedAt(item.publishedAt)}</small>
-                </a>
-              ))}
-            </div>
-          ) : (
-            <p className="home-muted">{newsError ?? "Loading headlines"}</p>
-          )}
-        </article>
-
-        <article className="home-card launch-card">
-          <div className="home-card-heading">
-            <div>
-              <span>Launch</span>
-            </div>
-          </div>
-          <div className="launch-list">
-            {activeModules.map((module) => (
-              <button key={module.id} onClick={() => onSelectModule(module.id)} type="button">
-                <span>
-                  <strong>{module.title}</strong>
-                  <small>{module.description}</small>
-                </span>
-                <ArrowRight size={16} />
+            <div className="feed-main-actions">
+              <button
+                aria-label="Edit interests"
+                className="feed-refresh"
+                onClick={() => setSettingsOpen(true)}
+                type="button"
+              >
+                <Settings size={14} />
+                <span>Interests</span>
               </button>
-            ))}
+              <button className="feed-refresh" disabled={refreshing} onClick={handleRefresh} type="button">
+                <RefreshCw className={refreshing ? "spin" : ""} size={14} />
+                <span>Refresh</span>
+              </button>
+            </div>
           </div>
-        </article>
+
+          {feedError && <p className="home-muted">{feedError}</p>}
+          {!feedError && feedLoading && <p className="home-muted">Loading feed</p>}
+          {!feedError && !feedLoading && visibleItems.length === 0 && (
+            <p className="home-muted">No items yet — try a refresh in a minute while feeds load.</p>
+          )}
+
+          <ul className="feed-list">
+            {visibleItems.map((item) => (
+              <li className="feed-item" key={item.id}>
+                <a href={item.url} onClick={() => handleOpen(item)} rel="noreferrer" target="_blank">
+                  <div className="feed-item-meta">
+                    <span className="feed-source-chip">{item.sourceName}</span>
+                    <small>{formatRelative(item.publishedAt ?? item.fetchedAt)}</small>
+                  </div>
+                  <h5>{item.title}</h5>
+                  <ArrowUpRight aria-hidden className="feed-item-arrow" size={14} />
+                </a>
+                <div className="feed-item-actions">
+                  <button
+                    aria-label={item.interaction === "saved" ? "Saved" : "Save for later"}
+                    className={item.interaction === "saved" ? "active" : ""}
+                    onClick={() => handleSave(item)}
+                    type="button"
+                  >
+                    {item.interaction === "saved" ? <BookmarkCheck size={14} /> : <Bookmark size={14} />}
+                  </button>
+                  <button aria-label="Dismiss" onClick={() => handleDismiss(item)} type="button">
+                    <EyeOff size={14} />
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </main>
+
+        <aside className="feed-rail">
+          <div className="feed-rail-heading">
+            <h4>Tasks</h4>
+            <button onClick={() => onSelectModule("tasks")} type="button">
+              Open
+            </button>
+          </div>
+          {tasksError && <p className="home-muted">{tasksError}</p>}
+          {!tasksError && openTasks.length === 0 && <p className="home-muted">Nothing open. Quiet day.</p>}
+          <ul className="feed-tasks">
+            {openTasks.map((task) => {
+              const due = formatTaskDue(task.due);
+              return (
+                <li className="feed-task" key={task.path}>
+                  <button
+                    aria-label={task.status === "done" ? "Mark todo" : "Mark done"}
+                    className={`feed-task-check ${task.status}`}
+                    onClick={() => toggleTask(task)}
+                    type="button"
+                  >
+                    {task.status === "done" ? <Check size={12} /> : null}
+                  </button>
+                  <div>
+                    <span>{task.title}</span>
+                    {due && <small>{due}</small>}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </aside>
       </div>
+
+      {settingsOpen && (
+        <FeedSettings
+          onClose={() => setSettingsOpen(false)}
+          onSaved={() => {
+            fetchFeed();
+          }}
+        />
+      )}
     </section>
   );
 }

@@ -153,6 +153,51 @@ export type NewsSummary = {
   items: NewsItem[];
 };
 
+export type FeedSourceType = "rss" | "hn" | "reddit";
+
+export type FeedSource = {
+  id: number;
+  name: string;
+  type: FeedSourceType;
+  url: string;
+  weight: number;
+  enabled: boolean;
+  createdAt: string;
+};
+
+export type FeedProfile = {
+  id: number;
+  name: string;
+  description: string;
+  keywordInclude: string[];
+  keywordExclude: string[];
+  sourceWeights: Record<string, number>;
+  enabled: boolean;
+};
+
+export type FeedInteractionAction = "opened" | "saved" | "dismissed" | "hidden";
+
+export type FeedItem = {
+  id: string;
+  sourceId: number;
+  sourceName: string;
+  sourceType: FeedSourceType;
+  title: string;
+  url: string;
+  summary: string | null;
+  publishedAt: string | null;
+  fetchedAt: string;
+  score: number;
+  interaction: FeedInteractionAction | null;
+};
+
+export type FeedResponse = {
+  profile: FeedProfile;
+  items: FeedItem[];
+  generatedAt: string;
+  lastPolledAt: string | null;
+};
+
 export type TaskStatus = "todo" | "doing" | "done";
 
 export type TaskPriority = "low" | "medium" | "high";
@@ -222,6 +267,9 @@ export type HealthBodyEntry = HealthLogBase & {
   hydration: number | null;
   gassiness: number | null;
   focus: number | null;
+  anxiety: number | null;
+  clarity: number | null;
+  motivation: number | null;
   social: SocialLevel | null;
   activityLevel: ActivityLevel | null;
   sunExposure: SunLevel | null;
@@ -232,14 +280,6 @@ export type HealthBodyEntry = HealthLogBase & {
   pain: string | null;
   symptoms: string | null;
   weightLb: number | null;
-  notes: string | null;
-};
-
-export type HealthBowelEntry = {
-  id: number;
-  capturedAt: string;
-  loggedDate: string;
-  bristol: number;
   notes: string | null;
 };
 

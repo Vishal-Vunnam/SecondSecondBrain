@@ -1,4 +1,4 @@
-import type { HealthBodyEntry, HealthBowelEntry, HealthCaptureResponse, HealthCommitmentEntry, HealthEntry, HealthEntryType, HealthOverview } from "../types";
+import type { HealthBodyEntry, HealthCaptureResponse, HealthCommitmentEntry, HealthEntry, HealthEntryType, HealthMealEntry, HealthOverview } from "../types";
 import { apiUrl } from "./api";
 
 async function parseJson<T>(response: Response): Promise<T> {
@@ -132,6 +132,9 @@ export type HealthCheckinPayload = Partial<{
   soreness: number | null;
   stress: number | null;
   focus: number | null;
+  anxiety: number | null;
+  clarity: number | null;
+  motivation: number | null;
   social: string | null;
   activityLevel: string | null;
   sunExposure: string | null;
@@ -163,28 +166,28 @@ export async function saveHealthCheckin(payload: HealthCheckinPayload & { date?:
   return parseJson<{ entry: HealthBodyEntry }>(response);
 }
 
-export async function loadHealthBowel(date?: string) {
+export async function loadHealthMeals(date?: string) {
   const params = new URLSearchParams({ timezone: timezone() });
   if (date) params.set("date", date);
-  const response = await fetch(apiUrl(`/api/health/bowel?${params.toString()}`), {
+  const response = await fetch(apiUrl(`/api/health/meals?${params.toString()}`), {
     cache: "no-store",
     credentials: "include",
   });
-  return parseJson<{ date: string; entries: HealthBowelEntry[] }>(response);
+  return parseJson<{ date: string; entries: HealthMealEntry[] }>(response);
 }
 
-export async function logHealthBowel(input: { bristol: number; date?: string; notes?: string | null }) {
-  const response = await fetch(apiUrl("/api/health/bowel"), {
+export async function logHealthMeal(input: { text: string; date?: string }) {
+  const response = await fetch(apiUrl(`/api/health/meals?timezone=${encodeURIComponent(timezone())}`), {
     method: "POST",
     headers: { "content-type": "application/json" },
     credentials: "include",
     body: JSON.stringify(input),
   });
-  return parseJson<{ entry: HealthBowelEntry }>(response);
+  return parseJson<{ entries: HealthMealEntry[] }>(response);
 }
 
-export async function deleteHealthBowel(id: number) {
-  const response = await fetch(apiUrl(`/api/health/bowel/${id}`), {
+export async function deleteHealthMeal(id: number) {
+  const response = await fetch(apiUrl(`/api/health/entries/meal/${id}`), {
     method: "DELETE",
     credentials: "include",
   });

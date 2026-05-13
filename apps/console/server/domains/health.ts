@@ -33,6 +33,9 @@ type HealthBodyDraft = {
   hydration?: number | null;
   gassiness?: number | null;
   focus?: number | null;
+  anxiety?: number | null;
+  clarity?: number | null;
+  motivation?: number | null;
   social?: string | null;
   activityLevel?: string | null;
   sunExposure?: string | null;
@@ -102,6 +105,9 @@ type HealthBodyEntry = HealthBaseEntry & {
   hydration: number | null;
   gassiness: number | null;
   focus: number | null;
+  anxiety: number | null;
+  clarity: number | null;
+  motivation: number | null;
   social: string | null;
   activityLevel: string | null;
   sunExposure: string | null;
@@ -282,6 +288,9 @@ function mapBody(row: Record<string, unknown>): HealthBodyEntry {
     hydration: rowNumber(row, "hydration"),
     gassiness: rowNumber(row, "gassiness"),
     focus: rowNumber(row, "focus"),
+    anxiety: rowNumber(row, "anxiety"),
+    clarity: rowNumber(row, "clarity"),
+    motivation: rowNumber(row, "motivation"),
     social: rowText(row, "social"),
     activityLevel: rowText(row, "activity_level"),
     sunExposure: rowText(row, "sun_exposure"),
@@ -374,9 +383,9 @@ function insertHealthBody(input: HealthBodyDraft, context: { capturedAt: string;
     .prepare(
       `INSERT INTO health_body_logs (
         captured_at, logged_date, source, summary, sleep_hours, sleep_quality, energy, mood_score, soreness, stress,
-        hydration, gassiness, focus, social, activity_level, sun_exposure, sick, alcohol, marijuana,
+        hydration, gassiness, focus, anxiety, clarity, motivation, social, activity_level, sun_exposure, sick, alcohol, marijuana,
         mood, pain, symptoms, weight_lb, notes, raw_text, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       context.capturedAt,
@@ -392,6 +401,9 @@ function insertHealthBody(input: HealthBodyDraft, context: { capturedAt: string;
       cleanOptionalInteger(input.hydration),
       cleanScore(input.gassiness),
       cleanScore(input.focus),
+      cleanScore(input.anxiety),
+      cleanScore(input.clarity),
+      cleanScore(input.motivation),
       cleanEnum(input.social, SOCIAL_LEVELS),
       cleanEnum(input.activityLevel, ACTIVITY_LEVELS),
       cleanEnum(input.sunExposure, SUN_LEVELS),
@@ -539,7 +551,7 @@ function updateHealthLogEntry(type: Exclude<HealthEntryType, "commitment">, id: 
       .prepare(
         `UPDATE health_body_logs
          SET captured_at = ?, logged_date = ?, summary = ?, sleep_hours = ?, sleep_quality = ?, energy = ?, mood_score = ?, soreness = ?,
-             stress = ?, hydration = ?, gassiness = ?, focus = ?, social = ?, activity_level = ?, sun_exposure = ?, sick = ?, alcohol = ?, marijuana = ?,
+             stress = ?, hydration = ?, gassiness = ?, focus = ?, anxiety = ?, clarity = ?, motivation = ?, social = ?, activity_level = ?, sun_exposure = ?, sick = ?, alcohol = ?, marijuana = ?,
              mood = ?, pain = ?, symptoms = ?, weight_lb = ?, notes = ?, updated_at = ?
          WHERE id = ?`,
       )
@@ -556,6 +568,9 @@ function updateHealthLogEntry(type: Exclude<HealthEntryType, "commitment">, id: 
         "hydration" in input ? cleanOptionalInteger(input.hydration) : body.hydration,
         "gassiness" in input ? cleanScore(input.gassiness) : body.gassiness,
         "focus" in input ? cleanScore(input.focus) : body.focus,
+        "anxiety" in input ? cleanScore(input.anxiety) : body.anxiety,
+        "clarity" in input ? cleanScore(input.clarity) : body.clarity,
+        "motivation" in input ? cleanScore(input.motivation) : body.motivation,
         "social" in input ? cleanEnum(input.social, SOCIAL_LEVELS) : body.social,
         "activityLevel" in input ? cleanEnum(input.activityLevel, ACTIVITY_LEVELS) : body.activityLevel,
         "sunExposure" in input ? cleanEnum(input.sunExposure, SUN_LEVELS) : body.sunExposure,
@@ -1525,61 +1540,6 @@ export async function routeHealthApi(req: IncomingMessage, res: ServerResponse, 
     return true;
   }
 
-  if (url.pathname === "/api/health/bowel" && req.method === "GET") {
-    const dateParam = url.searchParams.get("date");
-    const date = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : dateKeyInTimezone(new Date(), timezone);
-    const rows = db.prepare("SELECT id, captured_at, logged_date, bristol, notes FROM health_bowel WHERE logged_date = ? ORDER BY captured_at ASC, id ASC").all(date) as Array<{ id: number; captured_at: string; logged_date: string; bristol: number; notes: string | null }>;
-    const entries = rows.map((row) => ({
-      id: row.id,
-      capturedAt: row.captured_at,
-      loggedDate: row.logged_date,
-      bristol: row.bristol,
-      notes: row.notes,
-    }));
-    sendJson(res, 200, { date, entries });
-    return true;
-  }
-
-  if (url.pathname === "/api/health/bowel" && req.method === "POST") {
-    const body = await readJsonBody(req);
-    if (typeof body !== "object" || body === null) {
-      sendJson(res, 400, { error: "Expected JSON body" });
-      return true;
-    }
-    const input = body as { bristol?: unknown; notes?: unknown; date?: unknown };
-    const bristol = cleanOptionalInteger(input.bristol);
-    if (bristol === null || bristol < 1 || bristol > 7) {
-      sendJson(res, 400, { error: "bristol must be an integer 1-7" });
-      return true;
-    }
-    const date = typeof input.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(input.date) ? input.date : dateKeyInTimezone(new Date(), timezone);
-    const capturedAt = nowIso();
-    const result = db
-      .prepare("INSERT INTO health_bowel (captured_at, logged_date, bristol, notes) VALUES (?, ?, ?, ?)")
-      .run(capturedAt, date, bristol, cleanOptionalText(input.notes) || null);
-    sendJson(res, 201, {
-      entry: {
-        id: Number(result.lastInsertRowid),
-        capturedAt,
-        loggedDate: date,
-        bristol,
-        notes: cleanOptionalText(input.notes) || null,
-      },
-    });
-    return true;
-  }
-
-  const bowelIdMatch = url.pathname.match(/^\/api\/health\/bowel\/(\d+)$/);
-  if (bowelIdMatch && req.method === "DELETE") {
-    const result = db.prepare("DELETE FROM health_bowel WHERE id = ?").run(Number(bowelIdMatch[1]));
-    if (result.changes === 0) {
-      sendJson(res, 404, { error: "Bowel entry not found" });
-      return true;
-    }
-    sendJson(res, 200, { deleted: true });
-    return true;
-  }
-
   if (url.pathname === "/api/health/checkin" && req.method === "GET") {
     const dateParam = url.searchParams.get("date");
     const date = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : dateKeyInTimezone(new Date(), timezone);
@@ -1610,6 +1570,35 @@ export async function routeHealthApi(req: IncomingMessage, res: ServerResponse, 
       rawText: "",
     });
     sendJson(res, 201, { entry });
+    return true;
+  }
+
+  if (url.pathname === "/api/health/meals" && req.method === "GET") {
+    const dateParam = url.searchParams.get("date");
+    const date = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : dateKeyInTimezone(new Date(), timezone);
+    const rows = db.prepare("SELECT * FROM health_meals WHERE logged_date = ? ORDER BY captured_at ASC, id ASC").all(date) as Record<string, unknown>[];
+    sendJson(res, 200, { date, entries: rows.map(mapMeal) });
+    return true;
+  }
+
+  if (url.pathname === "/api/health/meals" && req.method === "POST") {
+    const body = await readJsonBody(req);
+    if (typeof body !== "object" || body === null || typeof (body as Record<string, unknown>).text !== "string") {
+      sendJson(res, 400, { error: "Expected { text, date? }" });
+      return true;
+    }
+    const input = body as { text: string; date?: string };
+    const text = input.text.trim();
+    if (!text) { sendJson(res, 400, { error: "text cannot be empty" }); return true; }
+    const loggedDate = typeof input.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(input.date) ? input.date : dateKeyInTimezone(new Date(), timezone);
+    const capturedAt = normalizeCapturedAt(`${loggedDate}T12:00:00.000Z`);
+    const parsed = await parseHealthWithGemini({ text, source: "console", timezone });
+    const entries: HealthEntry[] = [];
+    for (const meal of parsed.meals) {
+      const entry = insertHealthMeal(meal, { capturedAt, loggedDate, source: "console", rawText: text });
+      if (entry) entries.push(entry);
+    }
+    sendJson(res, 201, { entries });
     return true;
   }
 

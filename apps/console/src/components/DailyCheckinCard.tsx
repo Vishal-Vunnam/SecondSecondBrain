@@ -5,22 +5,23 @@ import {
   Loader2,
   Minus,
   Plus,
+  Send,
   Sun,
-  Toilet,
   Users,
+  Utensils,
   X,
   Zap,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   type HealthCheckinPayload,
-  deleteHealthBowel,
-  loadHealthBowel,
+  deleteHealthMeal,
   loadHealthCheckin,
-  logHealthBowel,
+  loadHealthMeals,
+  logHealthMeal,
   saveHealthCheckin,
 } from "../lib/healthData";
-import type { ActivityLevel, HealthBodyEntry, HealthBowelEntry, SocialLevel, SunLevel } from "../types";
+import type { ActivityLevel, HealthBodyEntry, HealthMealEntry, SocialLevel, SunLevel } from "../types";
 
 type SaveStatus = "idle" | "saving" | "saved" | "error";
 
@@ -28,16 +29,6 @@ const SCORE_LABELS = ["1", "2", "3", "4", "5"];
 const SOCIAL_OPTIONS: SocialLevel[] = ["alone", "light", "heavy"];
 const ACTIVITY_OPTIONS: ActivityLevel[] = ["sedentary", "mixed", "active"];
 const SUN_OPTIONS: SunLevel[] = ["none", "some", "lots"];
-
-const BRISTOL_LABELS: Record<number, string> = {
-  1: "Hard lumps",
-  2: "Lumpy",
-  3: "Cracked",
-  4: "Smooth",
-  5: "Soft blobs",
-  6: "Mushy",
-  7: "Liquid",
-};
 
 type ScoreRowProps = {
   label: string;
@@ -113,7 +104,10 @@ type DailyCheckinCardProps = {
 
 export function DailyCheckinCard({ date }: DailyCheckinCardProps = {}) {
   const [entry, setEntry] = useState<HealthBodyEntry | null>(null);
-  const [bowels, setBowels] = useState<HealthBowelEntry[]>([]);
+  const [meals, setMeals] = useState<HealthMealEntry[]>([]);
+  const [mealText, setMealText] = useState("");
+  const [mealLogging, setMealLogging] = useState(false);
+  const [mealError, setMealError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<SaveStatus>("idle");
   const saveTimeout = useRef<number | null>(null);
@@ -124,12 +118,12 @@ export function DailyCheckinCard({ date }: DailyCheckinCardProps = {}) {
     setLoading(true);
     Promise.all([
       loadHealthCheckin(date ?? undefined),
-      loadHealthBowel(date ?? undefined),
+      loadHealthMeals(date ?? undefined),
     ])
-      .then(([checkin, bowelResult]) => {
+      .then(([checkin, mealResult]) => {
         if (!active) return;
         setEntry(checkin.entry);
-        setBowels(bowelResult.entries);
+        setMeals(mealResult.entries);
         setLoading(false);
       })
       .catch(() => {
@@ -142,24 +136,28 @@ export function DailyCheckinCard({ date }: DailyCheckinCardProps = {}) {
     };
   }, [date]);
 
-  const tapBowel = useCallback(
-    async (bristol: number) => {
-      try {
-        const result = await logHealthBowel({ bristol, date: date ?? undefined });
-        setBowels((prev) => [...prev, result.entry]);
-      } catch {
-        setStatus("error");
-      }
-    },
-    [date],
-  );
-
-  const removeBowel = useCallback(async (id: number) => {
-    setBowels((prev) => prev.filter((b) => b.id !== id));
+  const submitMeal = useCallback(async () => {
+    const text = mealText.trim();
+    if (!text || mealLogging) return;
+    setMealLogging(true);
+    setMealError(null);
     try {
-      await deleteHealthBowel(id);
+      const result = await logHealthMeal({ text, date: date ?? undefined });
+      setMeals((prev) => [...prev, ...result.entries]);
+      setMealText("");
+    } catch (err) {
+      setMealError(err instanceof Error ? err.message : "Could not parse meal");
+    } finally {
+      setMealLogging(false);
+    }
+  }, [date, mealText, mealLogging]);
+
+  const removeMeal = useCallback(async (id: number) => {
+    setMeals((prev) => prev.filter((m) => m.id !== id));
+    try {
+      await deleteHealthMeal(id);
     } catch {
-      setStatus("error");
+      setMealError("Could not delete meal");
     }
   }, []);
 
@@ -237,6 +235,9 @@ export function DailyCheckinCard({ date }: DailyCheckinCardProps = {}) {
           <ScoreRow label="Energy" onChange={(v) => queueSave({ energy: v })} value={entry?.energy ?? null} />
           <ScoreRow label="Mood" onChange={(v) => queueSave({ moodScore: v })} value={entry?.moodScore ?? null} />
           <ScoreRow label="Focus" onChange={(v) => queueSave({ focus: v })} value={entry?.focus ?? null} />
+          <ScoreRow label="Anxiety" onChange={(v) => queueSave({ anxiety: v })} value={entry?.anxiety ?? null} />
+          <ScoreRow label="Clarity" onChange={(v) => queueSave({ clarity: v })} value={entry?.clarity ?? null} />
+          <ScoreRow label="Motivation" onChange={(v) => queueSave({ motivation: v })} value={entry?.motivation ?? null} />
           <ScoreRow label="Soreness" onChange={(v) => queueSave({ soreness: v })} value={entry?.soreness ?? null} />
           <ScoreRow label="Stress" onChange={(v) => queueSave({ stress: v })} value={entry?.stress ?? null} />
         </div>
@@ -329,36 +330,72 @@ export function DailyCheckinCard({ date }: DailyCheckinCardProps = {}) {
         </div>
       </div>
 
-      <div className="checkin-bowel">
+      <div className="checkin-food">
         <span className="checkin-row-label">
-          <Toilet size={14} />
-          Bowel (Bristol)
+          <Utensils size={14} />
+          Food
         </span>
-        <div className="checkin-score-buttons">
-          {[1, 2, 3, 4, 5, 6, 7].map((n) => (
-            <button
-              aria-label={`Bristol ${n} ${BRISTOL_LABELS[n]}`}
-              key={n}
-              onClick={() => tapBowel(n)}
-              title={BRISTOL_LABELS[n]}
-              type="button"
-            >
-              {n}
-            </button>
-          ))}
+        <div className="checkin-food-input">
+          <textarea
+            aria-label="What did you eat?"
+            disabled={mealLogging}
+            onChange={(e) => setMealText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault();
+                submitMeal();
+              }
+            }}
+            placeholder="What did you eat? e.g. oatmeal + protein for breakfast, chicken bowl for lunch…"
+            rows={2}
+            value={mealText}
+          />
+          <button
+            aria-label="Log meal"
+            disabled={!mealText.trim() || mealLogging}
+            onClick={submitMeal}
+            type="button"
+          >
+            {mealLogging ? <Loader2 className="spin" size={14} /> : <Send size={14} />}
+          </button>
         </div>
-        {bowels.length > 0 && (
-          <ul className="checkin-tap-log">
-            {bowels.map((b) => (
-              <li key={b.id}>
-                <span>Bristol {b.bristol} · {BRISTOL_LABELS[b.bristol] ?? ""}</span>
-                <button aria-label="Remove" onClick={() => removeBowel(b.id)} type="button">
-                  <X size={12} />
-                </button>
-              </li>
-            ))}
+        {mealError && <p className="checkin-food-error">{mealError}</p>}
+        {meals.length > 0 && (
+          <ul className="checkin-food-list">
+            {meals.map((m) => {
+              const parts: string[] = [];
+              if (m.mealType) parts.push(m.mealType);
+              if (m.proteinGEstimate !== null && m.proteinGEstimate !== undefined) parts.push(`${Math.round(m.proteinGEstimate)}g protein`);
+              if (m.caloriesEstimate !== null && m.caloriesEstimate !== undefined) parts.push(`${Math.round(m.caloriesEstimate)} kcal`);
+              return (
+                <li key={m.id}>
+                  <div>
+                    <strong>{m.summary || m.description}</strong>
+                    {parts.length > 0 && <small>{parts.join(" · ")}</small>}
+                  </div>
+                  <button aria-label="Remove meal" onClick={() => removeMeal(m.id)} type="button">
+                    <X size={12} />
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         )}
+      </div>
+
+      <div className="checkin-notes">
+        <label className="checkin-row-label" htmlFor="checkin-notes">Notes</label>
+        <textarea
+          defaultValue={entry?.notes ?? ""}
+          id="checkin-notes"
+          key={entry?.notes ?? ""}
+          onBlur={(e) => {
+            const trimmed = e.target.value.trim();
+            queueSave({ notes: trimmed === "" ? null : trimmed });
+          }}
+          placeholder="Anything else worth remembering about today?"
+          rows={3}
+        />
       </div>
     </article>
   );

@@ -13,6 +13,7 @@ import {
 } from "./core/config.js";
 import { contentTypes, getRequestUrl, send, sendJson } from "./core/http.js";
 import { isAuthEnabled, isAuthenticated, routeAuth } from "./core/auth.js";
+import { routeFeed, startFeedPoller } from "./domains/feed.js";
 import { routeFitness, topUpRecurrences } from "./domains/fitness.js";
 import { intakeHealth, routeHealthApi } from "./domains/health.js";
 import { routeHome } from "./domains/home.js";
@@ -136,6 +137,10 @@ async function route(req: IncomingMessage, res: ServerResponse) {
     return;
   }
 
+  if (url.pathname.startsWith("/api/feed") && (await routeFeed(req, res, url))) {
+    return;
+  }
+
   if ((url.pathname.startsWith("/api/tasks") || url.pathname === "/api/intake/task") && (await routeTasks(req, res, url))) {
     return;
   }
@@ -174,4 +179,5 @@ server.listen(port, host, () => {
   console.log(`health db: ${healthDbPath}`);
   syncTaskIndex().catch((error) => console.warn("initial tasks index sync failed", error));
   try { topUpRecurrences(); } catch (error) { console.warn("initial recurrence top-up failed", error); }
+  try { startFeedPoller(); } catch (error) { console.warn("initial feed poll failed", error); }
 });

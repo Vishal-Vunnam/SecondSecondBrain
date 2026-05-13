@@ -337,13 +337,7 @@ export function App() {
         )}
         <section className="workbench">
           <div className="workspace-page">
-            {activeModuleId === "home" && (
-              <HomePanel
-                noteCount={entries.filter((entry) => entry.type === "file").length}
-                onSelectModule={setActiveModuleId}
-                statuses={statuses}
-              />
-            )}
+            {activeModuleId === "home" && <HomePanel onSelectModule={setActiveModuleId} />}
             {activeModuleId === "tasks" && <TasksPanel onOpenTask={openTaskNote} />}
             {activeModuleId === "health" && <HealthPanel />}
             {activeModuleId === "health-log" && <HealthLogPanel />}

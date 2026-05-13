@@ -106,16 +106,7 @@ function migrate() {
     );
 
     DROP TABLE IF EXISTS health_signals;
-
-    CREATE TABLE IF NOT EXISTS health_bowel (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      captured_at TEXT NOT NULL,
-      logged_date TEXT NOT NULL,
-      bristol INTEGER NOT NULL,
-      notes TEXT
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_health_bowel_logged_date ON health_bowel(logged_date);
+    DROP TABLE IF EXISTS health_bowel;
 
 CREATE INDEX IF NOT EXISTS idx_health_meals_logged_date ON health_meals(logged_date);
     CREATE INDEX IF NOT EXISTS idx_health_workouts_logged_date ON health_workouts(logged_date);
@@ -185,6 +176,56 @@ CREATE INDEX IF NOT EXISTS idx_health_meals_logged_date ON health_meals(logged_d
     CREATE INDEX IF NOT EXISTS idx_workouts_date ON workouts(date);
     CREATE INDEX IF NOT EXISTS idx_workout_sets_workout ON workout_sets(workout_id);
     CREATE INDEX IF NOT EXISTS idx_workout_sets_exercise ON workout_sets(exercise);
+
+    CREATE TABLE IF NOT EXISTS feed_sources (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      type TEXT NOT NULL,
+      url TEXT NOT NULL UNIQUE,
+      weight REAL NOT NULL DEFAULT 1,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      last_polled_at TEXT,
+      last_error TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS feed_items (
+      id TEXT PRIMARY KEY,
+      source_id INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      url TEXT NOT NULL,
+      summary TEXT,
+      authors TEXT,
+      tags TEXT,
+      published_at TEXT,
+      fetched_at TEXT NOT NULL,
+      FOREIGN KEY (source_id) REFERENCES feed_sources(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_feed_items_published ON feed_items(published_at);
+    CREATE INDEX IF NOT EXISTS idx_feed_items_source ON feed_items(source_id);
+
+    CREATE TABLE IF NOT EXISTS feed_profiles (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      keyword_include TEXT NOT NULL DEFAULT '[]',
+      keyword_exclude TEXT NOT NULL DEFAULT '[]',
+      source_weights TEXT NOT NULL DEFAULT '{}',
+      enabled INTEGER NOT NULL DEFAULT 1
+    );
+
+    CREATE TABLE IF NOT EXISTS feed_interactions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      item_id TEXT NOT NULL,
+      profile_id INTEGER,
+      action TEXT NOT NULL,
+      at TEXT NOT NULL,
+      FOREIGN KEY (item_id) REFERENCES feed_items(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_feed_interactions_item ON feed_interactions(item_id);
+    CREATE INDEX IF NOT EXISTS idx_feed_interactions_at ON feed_interactions(at);
   `);
 
   ensureColumn("health_meals", "hunger", "INTEGER");
@@ -211,6 +252,9 @@ CREATE INDEX IF NOT EXISTS idx_health_meals_logged_date ON health_meals(logged_d
   ensureColumn("health_body_logs", "sick", "INTEGER");
   ensureColumn("health_body_logs", "alcohol", "INTEGER");
   ensureColumn("health_body_logs", "marijuana", "INTEGER");
+  ensureColumn("health_body_logs", "anxiety", "INTEGER");
+  ensureColumn("health_body_logs", "clarity", "INTEGER");
+  ensureColumn("health_body_logs", "motivation", "INTEGER");
 
   ensureColumn("workouts", "duration_minutes", "INTEGER");
   ensureColumn("workouts", "intensity", "INTEGER");
