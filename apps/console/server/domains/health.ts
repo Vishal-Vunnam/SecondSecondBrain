@@ -1207,7 +1207,7 @@ async function parseHealthWithGemini(input: { text: string; source: string; time
               },
             },
           },
-          required: ["route", "confirmation", "meals", "workouts", "bodyLogs", "commitments"],
+          required: ["route", "confirmation", "meals", "bodyLogs", "commitments"],
         },
       },
     }),
