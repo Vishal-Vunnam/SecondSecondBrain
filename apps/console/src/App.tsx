@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AuthPanel } from "./components/AuthPanel";
 import { FitnessPanel } from "./components/FitnessPanel";
+import { HealthFoodPanel } from "./components/HealthFoodPanel";
 import { HealthLogPanel } from "./components/HealthLogPanel";
 import { HealthPanel } from "./components/HealthPanel";
 import { HomePanel } from "./components/HomePanel";
 import { LedgerPanel } from "./components/LedgerPanel";
 import { ManuscriptPanel } from "./components/ManuscriptPanel";
 import { PlannedModulePanel } from "./components/PlannedModulePanel";
+import { ReadingListPanel } from "./components/ReadingListPanel";
 import { ShoppingPanel } from "./components/ShoppingPanel";
 import { TasksPanel } from "./components/TasksPanel";
 import { TerminalPanel } from "./components/TerminalPanel";
@@ -341,8 +343,10 @@ export function App() {
             {activeModuleId === "tasks" && <TasksPanel onOpenTask={openTaskNote} />}
             {activeModuleId === "health" && <HealthPanel />}
             {activeModuleId === "health-log" && <HealthLogPanel />}
+            {activeModuleId === "health-food" && <HealthFoodPanel />}
             {activeModuleId === "fitness" && <FitnessPanel />}
             {activeModuleId === "shopping" && <ShoppingPanel />}
+            {activeModuleId === "reading-list" && <ReadingListPanel />}
             {activeModuleId === "notes" && (
               <ManuscriptPanel
                 dirty={dirty}

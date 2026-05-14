@@ -530,6 +530,8 @@ function updateHealthLogEntry(type: Exclude<HealthEntryType, "commitment">, id: 
     typeof input.loggedDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(input.loggedDate) ? input.loggedDate : dateKeyInTimezone(new Date(capturedAt), timezone);
   const timestamp = nowIso();
 
+  const mealMacroEdited = type === "meal" && ["caloriesEstimate", "proteinGEstimate", "carbsGEstimate", "fatGEstimate", "fiberGEstimate", "description", "mealType"].some((key) => key in input);
+
   if (type === "meal") {
     const meal = existing as HealthMealEntry;
     db
@@ -604,7 +606,11 @@ function updateHealthLogEntry(type: Exclude<HealthEntryType, "commitment">, id: 
       );
   }
 
-  return getHealthEntry(type, id);
+  const refreshed = getHealthEntry(type, id);
+  if (mealMacroEdited && refreshed && refreshed.type === "meal") {
+    upsertMealTemplateFromMeal(refreshed);
+  }
+  return refreshed;
 }
 
 export function listRecentHealthEntries(limit = 20) {
@@ -759,6 +765,716 @@ function getHealthOverview(timezone: string) {
     insights: buildHealthObservations(timezone),
     commitments: activeCommitments.slice(0, 6),
     recent: listRecentHealthEntries(8),
+  };
+}
+
+type FoodAlignmentConfidence = "low" | "medium" | "high";
+
+type FoodAlignmentRead = {
+  status: string;
+  confidence: FoodAlignmentConfidence;
+  reason: string;
+};
+
+type TaggedMeal = {
+  meal: HealthMealEntry;
+  tags: string[];
+};
+
+const PLANT_KEYWORDS = [
+  "bean",
+  "beans",
+  "lentil",
+  "lentils",
+  "chickpea",
+  "chickpeas",
+  "vegetable",
+  "vegetables",
+  "greens",
+  "spinach",
+  "kale",
+  "broccoli",
+  "pepper",
+  "peppers",
+  "tomato",
+  "tomatoes",
+  "salad",
+  "fruit",
+  "berries",
+  "berry",
+  "apple",
+  "banana",
+  "avocado",
+  "edamame",
+  "tofu",
+];
+
+const STABLE_CARB_KEYWORDS = [
+  "oats",
+  "oatmeal",
+  "rice",
+  "potato",
+  "potatoes",
+  "sweet potato",
+  "beans",
+  "lentils",
+  "quinoa",
+  "whole grain",
+  "whole wheat",
+  "fruit",
+  "berries",
+];
+
+const CRASH_RISK_KEYWORDS = [
+  "candy",
+  "cookie",
+  "cookies",
+  "cake",
+  "donut",
+  "doughnut",
+  "ice cream",
+  "soda",
+  "cola",
+  "juice",
+  "milkshake",
+  "fries",
+  "chips",
+  "pastry",
+  "dessert",
+  "sugary",
+];
+
+const OMEGA3_KEYWORDS = ["salmon", "sardines", "sardine", "trout", "tuna", "mackerel"];
+const FERMENTED_KEYWORDS = ["yogurt", "kefir", "kimchi", "sauerkraut", "miso", "tempeh"];
+const ULTRA_PROCESSED_KEYWORDS = [
+  "fast food",
+  "mcdonald",
+  "burger king",
+  "taco bell",
+  "chick-fil-a",
+  "chick fil a",
+  "packaged snack",
+  "candy",
+  "soda",
+  "chips",
+  "fries",
+  "fried chicken",
+];
+
+const MEAL_FILLER_WORDS = new Set([
+  "a", "an", "the", "some", "of", "with", "and", "to", "had", "ate", "having",
+  "for", "i", "my", "this", "today", "yesterday", "tonight", "morning",
+  "afternoon", "evening", "night", "as", "lunch", "breakfast", "dinner", "snack",
+  "meal", "drink",
+]);
+
+function normalizeMealKey(description: string, mealType?: string | null) {
+  const cleaned = (description || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .filter((word) => word && !MEAL_FILLER_WORDS.has(word))
+    .join(" ");
+  return cleaned ? (mealType ? `${mealType}:${cleaned}` : cleaned) : "";
+}
+
+type MealTemplateRow = {
+  id: number;
+  canonical_name: string;
+  normalized_key: string;
+  default_meal_type: string | null;
+  calories_estimate: number | null;
+  protein_g_estimate: number | null;
+  carbs_g_estimate: number | null;
+  fat_g_estimate: number | null;
+  fiber_g_estimate: number | null;
+  tags: string;
+  use_count: number;
+  last_used_at: string | null;
+};
+
+function findMealTemplate(description: string, mealType?: string | null): MealTemplateRow | null {
+  const key = normalizeMealKey(description, mealType);
+  if (!key) return null;
+  const exact = db.prepare("SELECT * FROM food_meal_templates WHERE normalized_key = ?").get(key) as MealTemplateRow | undefined;
+  if (exact) return exact;
+  const bare = normalizeMealKey(description);
+  if (bare && bare !== key) {
+    const fallback = db.prepare("SELECT * FROM food_meal_templates WHERE normalized_key = ?").get(bare) as MealTemplateRow | undefined;
+    if (fallback) return fallback;
+  }
+  return null;
+}
+
+function recordMealTemplateUse(id: number) {
+  const timestamp = nowIso();
+  db.prepare(
+    `UPDATE food_meal_templates SET use_count = use_count + 1, last_used_at = ?, updated_at = ? WHERE id = ?`,
+  ).run(timestamp, timestamp, id);
+}
+
+function templateToMealDraft(template: MealTemplateRow, description: string, mealType?: string | null): HealthMealDraft {
+  return {
+    description,
+    mealType: mealType || template.default_meal_type || undefined,
+    caloriesEstimate: template.calories_estimate,
+    proteinGEstimate: template.protein_g_estimate,
+    carbsGEstimate: template.carbs_g_estimate,
+    fatGEstimate: template.fat_g_estimate,
+    fiberGEstimate: template.fiber_g_estimate,
+  };
+}
+
+function upsertMealTemplateFromMeal(meal: HealthMealEntry) {
+  const description = meal.description?.trim();
+  if (!description) return;
+  const hasMacros = [meal.caloriesEstimate, meal.proteinGEstimate, meal.carbsGEstimate, meal.fatGEstimate, meal.fiberGEstimate].some(
+    (value) => typeof value === "number" && Number.isFinite(value),
+  );
+  if (!hasMacros) return;
+  const key = normalizeMealKey(description, meal.mealType);
+  if (!key) return;
+  const timestamp = nowIso();
+  const tags = JSON.stringify(tagMeal(meal));
+  const existing = db.prepare("SELECT id FROM food_meal_templates WHERE normalized_key = ?").get(key) as { id: number } | undefined;
+  if (existing) {
+    db.prepare(
+      `UPDATE food_meal_templates
+         SET canonical_name = ?, default_meal_type = ?, calories_estimate = ?, protein_g_estimate = ?,
+             carbs_g_estimate = ?, fat_g_estimate = ?, fiber_g_estimate = ?, tags = ?, updated_at = ?
+       WHERE id = ?`,
+    ).run(
+      description,
+      meal.mealType,
+      meal.caloriesEstimate,
+      meal.proteinGEstimate,
+      meal.carbsGEstimate,
+      meal.fatGEstimate,
+      meal.fiberGEstimate,
+      tags,
+      timestamp,
+      existing.id,
+    );
+  } else {
+    db.prepare(
+      `INSERT INTO food_meal_templates (
+         canonical_name, normalized_key, default_meal_type, calories_estimate, protein_g_estimate,
+         carbs_g_estimate, fat_g_estimate, fiber_g_estimate, tags, use_count, created_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+    ).run(
+      description,
+      key,
+      meal.mealType,
+      meal.caloriesEstimate,
+      meal.proteinGEstimate,
+      meal.carbsGEstimate,
+      meal.fatGEstimate,
+      meal.fiberGEstimate,
+      tags,
+      timestamp,
+      timestamp,
+    );
+  }
+}
+
+function offsetDateKey(dateKey: string, offsetDays: number) {
+  const date = new Date(`${dateKey}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + offsetDays);
+  return date.toISOString().slice(0, 10);
+}
+
+function sumKnown(values: Array<number | null>) {
+  const numbers = values.filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  if (!numbers.length) return null;
+  return numbers.reduce((sum, value) => sum + value, 0);
+}
+
+function normalizedFoodText(meal: HealthMealEntry) {
+  return [meal.summary, meal.description, meal.notes]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function includesAny(text: string, keywords: string[]) {
+  return keywords.some((keyword) => text.includes(keyword));
+}
+
+function tagMeal(meal: HealthMealEntry): string[] {
+  const tags = new Set<string>();
+  const text = normalizedFoodText(meal);
+  const calories = meal.caloriesEstimate;
+  const protein = meal.proteinGEstimate;
+  const fiber = meal.fiberGEstimate;
+
+  const highProtein = protein !== null && (protein >= 30 || (protein >= 20 && (calories ?? 0) <= 500));
+  const lowProtein = calories !== null && calories >= 250 && (protein ?? 0) < 15;
+  const fiberSupport = fiber !== null && fiber >= 8;
+  const plantHeavy = includesAny(text, PLANT_KEYWORDS);
+  const stableCarb = includesAny(text, STABLE_CARB_KEYWORDS);
+  const macroCrashRisk = calories !== null && calories >= 250 && (protein ?? 0) < 12 && (fiber ?? 0) < 4;
+  const keywordCrashRisk = includesAny(text, CRASH_RISK_KEYWORDS);
+
+  if (highProtein) tags.add("high-protein");
+  if (lowProtein) tags.add("low-protein");
+  if (fiberSupport) tags.add("fiber-support");
+  if (plantHeavy) tags.add("plant-heavy");
+  if (stableCarb) tags.add("stable-carb");
+  if ((keywordCrashRisk && !highProtein && !fiberSupport) || macroCrashRisk) tags.add("crash-risk");
+  if (includesAny(text, OMEGA3_KEYWORDS)) tags.add("omega-3");
+  if (includesAny(text, FERMENTED_KEYWORDS)) tags.add("fermented");
+  if (includesAny(text, ULTRA_PROCESSED_KEYWORDS)) tags.add("ultra-processed");
+  if ((highProtein || stableCarb) && !tags.has("crash-risk")) tags.add("focus-friendly");
+
+  return Array.from(tags);
+}
+
+function countTaggedMeals(taggedMeals: TaggedMeal[], tag: string) {
+  return taggedMeals.filter((item) => item.tags.includes(tag)).length;
+}
+
+function buildDailyFoodTotals(taggedMeals: TaggedMeal[]) {
+  const meals = taggedMeals.map((item) => item.meal);
+  const firstMeal = meals[0] ?? null;
+  const breakfast = meals.filter((meal) => meal.mealType === "breakfast");
+  const breakfastProtein = sumKnown(breakfast.map((meal) => meal.proteinGEstimate));
+  return {
+    mealCount: meals.length,
+    caloriesTotal: sumKnown(meals.map((meal) => meal.caloriesEstimate)),
+    proteinTotal: sumKnown(meals.map((meal) => meal.proteinGEstimate)),
+    carbsTotal: sumKnown(meals.map((meal) => meal.carbsGEstimate)),
+    fatTotal: sumKnown(meals.map((meal) => meal.fatGEstimate)),
+    fiberTotal: sumKnown(meals.map((meal) => meal.fiberGEstimate)),
+    firstMealAt: firstMeal?.capturedAt ?? null,
+    firstMealType: firstMeal?.mealType ?? null,
+    firstMealProtein: firstMeal?.proteinGEstimate ?? null,
+    breakfastLogged: breakfast.length > 0,
+    breakfastProtein,
+    plantTagCount: countTaggedMeals(taggedMeals, "plant-heavy"),
+    stableCarbCount: countTaggedMeals(taggedMeals, "stable-carb"),
+    crashRiskCount: countTaggedMeals(taggedMeals, "crash-risk"),
+    ultraProcessedCount: countTaggedMeals(taggedMeals, "ultra-processed"),
+  };
+}
+
+function bodyContextFor(date: string) {
+  const row = db.prepare("SELECT * FROM health_body_logs WHERE logged_date = ? ORDER BY id DESC LIMIT 1").get(date) as Record<string, unknown> | undefined;
+  return row ? mapBody(row) : null;
+}
+
+function workoutContextFor(date: string) {
+  const rows = db.prepare("SELECT * FROM workouts WHERE date = ? AND status = 'done'").all(date) as Record<string, unknown>[];
+  const minutes = sumKnown(rows.map((row) => rowNumber(row, "duration_minutes")));
+  const intensity = average(rows.map((row) => rowNumber(row, "intensity")));
+  return {
+    workoutDone: rows.length > 0,
+    workoutMinutes: minutes,
+    workoutIntensity: intensity,
+    heavyTraining: (minutes ?? 0) >= 75 || (intensity ?? 0) >= 4,
+  };
+}
+
+function confidenceWithContext(confidence: FoodAlignmentConfidence, adjusted: boolean): FoodAlignmentConfidence {
+  if (!adjusted) return confidence;
+  if (confidence === "high") return "medium";
+  return "low";
+}
+
+function formatGrams(value: number | null) {
+  return value === null ? "unknown" : `${Math.round(value)}g`;
+}
+
+type AlignmentTrackRow = {
+  key: string;
+  label: string;
+  priority: number;
+  status: string;
+  baseline_value: number | null;
+  current_target_min: number | null;
+  current_target_max: number | null;
+  confidence: FoodAlignmentConfidence;
+  active_nudge: string | null;
+  last_promoted_at: string | null;
+};
+
+function listAlignmentTracks(): AlignmentTrackRow[] {
+  return db.prepare("SELECT * FROM food_alignment_tracks ORDER BY priority ASC").all() as AlignmentTrackRow[];
+}
+
+function updateAlignmentTrack(key: string, patch: Partial<AlignmentTrackRow>) {
+  const timestamp = nowIso();
+  db.prepare(
+    `UPDATE food_alignment_tracks
+       SET baseline_value = ?, current_target_min = ?, current_target_max = ?, confidence = ?, active_nudge = ?, last_promoted_at = ?, updated_at = ?
+     WHERE key = ?`,
+  ).run(
+    patch.baseline_value ?? null,
+    patch.current_target_min ?? null,
+    patch.current_target_max ?? null,
+    patch.confidence ?? "low",
+    patch.active_nudge ?? null,
+    patch.last_promoted_at ?? timestamp,
+    timestamp,
+    key,
+  );
+}
+
+function maybeRefreshAlignmentTracks(args: {
+  date: string;
+  proteinBaseline: number | null;
+  fiberBaseline: number | null;
+  proteinTargetMin: number;
+  fiberTargetMin: number;
+  weeklyLoggedDays: number;
+  weeklyPlantTags: number;
+  weeklyCrashRisk: number;
+  weeklyUltraProcessed: number;
+  weeklyOmega3: number;
+  weeklyFermented: number;
+  contextAdjusted: boolean;
+}) {
+  const tracks = listAlignmentTracks();
+  const focus = tracks.find((track) => track.key === "focus");
+  const stale = (track: AlignmentTrackRow | undefined) => {
+    if (!track) return false;
+    if (!track.last_promoted_at) return true;
+    const diff = Date.parse(args.date) - Date.parse(track.last_promoted_at);
+    return Number.isFinite(diff) && diff >= 7 * 24 * 60 * 60 * 1000;
+  };
+
+  if (!focus || !stale(focus)) {
+    // Refresh confidence/baseline on every call but only promote weekly to avoid noise.
+  }
+
+  const confidenceFor = (samples: number): FoodAlignmentConfidence => {
+    if (args.contextAdjusted) return samples >= 5 ? "medium" : "low";
+    if (samples >= 5) return "high";
+    if (samples >= 3) return "medium";
+    return "low";
+  };
+
+  const nutrientsBaseline = args.proteinBaseline;
+  const nutrientsNudge = args.proteinBaseline !== null && args.proteinBaseline < args.proteinTargetMin
+    ? `Aim for ${args.proteinTargetMin}g protein this week — current baseline ~${Math.round(args.proteinBaseline)}g.`
+    : args.fiberBaseline !== null && args.fiberBaseline < args.fiberTargetMin
+      ? `Add fiber/plants this week: target ${args.fiberTargetMin}g fiber vs ~${Math.round(args.fiberBaseline)}g baseline.`
+      : "Protein and fiber baselines look covered — hold and add variety.";
+
+  const focusNudge = args.weeklyCrashRisk >= 3
+    ? "Cut early crash-risk meals — favor protein-forward breakfasts this week."
+    : "Anchor focus with protein in the first meal and a stable carb most days.";
+
+  const energyNudge = args.weeklyLoggedDays < 3
+    ? "Log more days so energy patterns become readable."
+    : "Hold steady meal spacing; pair carbs with protein/fiber when energy dips.";
+
+  const longevityNudge = args.weeklyPlantTags < 5 || args.weeklyOmega3 + args.weeklyFermented < 1
+    ? "Add one longevity anchor this week: fish, legumes, fermented foods, or extra greens."
+    : args.weeklyUltraProcessed > 3
+      ? "Trim ultra-processed meals this week — keep one or two anchor swaps."
+      : "Weekly pattern looks aligned. Keep the rotation.";
+
+  const updates: Array<[string, Partial<AlignmentTrackRow>]> = [
+    ["focus", {
+      baseline_value: null,
+      current_target_min: null,
+      current_target_max: null,
+      confidence: confidenceFor(args.weeklyLoggedDays),
+      active_nudge: focusNudge,
+      last_promoted_at: args.date,
+    }],
+    ["energy", {
+      baseline_value: null,
+      current_target_min: null,
+      current_target_max: null,
+      confidence: confidenceFor(args.weeklyLoggedDays),
+      active_nudge: energyNudge,
+      last_promoted_at: args.date,
+    }],
+    ["nutrients", {
+      baseline_value: nutrientsBaseline,
+      current_target_min: args.proteinTargetMin,
+      current_target_max: args.proteinTargetMin + 25,
+      confidence: confidenceFor(args.weeklyLoggedDays),
+      active_nudge: nutrientsNudge,
+      last_promoted_at: args.date,
+    }],
+    ["longevity", {
+      baseline_value: args.weeklyPlantTags,
+      current_target_min: 5,
+      current_target_max: 14,
+      confidence: confidenceFor(args.weeklyLoggedDays),
+      active_nudge: longevityNudge,
+      last_promoted_at: args.date,
+    }],
+  ];
+
+  for (const [key, patch] of updates) {
+    const existing = tracks.find((track) => track.key === key);
+    if (!existing) continue;
+    if (!stale(existing) && existing.active_nudge) {
+      // Keep active nudge stable across the week; refresh baseline+confidence only.
+      db.prepare(
+        `UPDATE food_alignment_tracks
+           SET baseline_value = ?, current_target_min = ?, current_target_max = ?, confidence = ?, updated_at = ?
+         WHERE key = ?`,
+      ).run(
+        patch.baseline_value ?? null,
+        patch.current_target_min ?? null,
+        patch.current_target_max ?? null,
+        patch.confidence ?? "low",
+        nowIso(),
+        key,
+      );
+    } else {
+      updateAlignmentTrack(key, patch);
+    }
+  }
+}
+
+function pickPrimaryNudge(deterministic: string, tracks: AlignmentTrackRow[]): string {
+  const nutrients = tracks.find((track) => track.key === "nutrients");
+  if (nutrients?.active_nudge && nutrients.confidence !== "low") return nutrients.active_nudge;
+  const focus = tracks.find((track) => track.key === "focus");
+  if (focus?.active_nudge && focus.confidence === "high") return focus.active_nudge;
+  return deterministic;
+}
+
+function buildFoodAlignment(input: { date: string; timezone: string }) {
+  const date = input.date;
+  const start7 = offsetDateKey(date, -6);
+  const start14 = offsetDateKey(date, -14);
+  const yesterday = offsetDateKey(date, -1);
+
+  const allWindowMeals = (db
+    .prepare("SELECT * FROM health_meals WHERE logged_date >= ? AND logged_date <= ? ORDER BY logged_date ASC, captured_at ASC, id ASC")
+    .all(start7, date) as Record<string, unknown>[])
+    .map(mapMeal);
+  const taggedWindowMeals = allWindowMeals.map((meal) => ({ meal, tags: tagMeal(meal) }));
+  const taggedTodayMeals = taggedWindowMeals.filter((item) => item.meal.loggedDate === date);
+  const todayTotals = buildDailyFoodTotals(taggedTodayMeals);
+
+  const baselineMealRows = (db
+    .prepare("SELECT * FROM health_meals WHERE logged_date >= ? AND logged_date < ? ORDER BY logged_date ASC, captured_at ASC, id ASC")
+    .all(start14, date) as Record<string, unknown>[])
+    .map(mapMeal);
+  const baselineByDate = new Map<string, HealthMealEntry[]>();
+  for (const meal of baselineMealRows) {
+    if (!baselineByDate.has(meal.loggedDate)) baselineByDate.set(meal.loggedDate, []);
+    baselineByDate.get(meal.loggedDate)!.push(meal);
+  }
+  const baselineDays = Array.from(baselineByDate.values()).filter((meals) => meals.length > 0);
+  const calorieBaseline = average(baselineDays.map((meals) => sumKnown(meals.map((meal) => meal.caloriesEstimate))));
+  const proteinBaseline = average(baselineDays.map((meals) => sumKnown(meals.map((meal) => meal.proteinGEstimate))));
+  const fiberBaseline = average(baselineDays.map((meals) => sumKnown(meals.map((meal) => meal.fiberGEstimate))));
+
+  const proteinTargetMin = proteinBaseline === null ? 80 : Math.round(Math.min(130, Math.max(65, proteinBaseline + 10)));
+  const fiberTargetMin = fiberBaseline === null ? 18 : Math.round(Math.min(28, Math.max(14, fiberBaseline + 4)));
+
+  const todayBody = bodyContextFor(date);
+  const yesterdayBody = bodyContextFor(yesterday);
+  const workout = workoutContextFor(date);
+  const sleepLow = (todayBody?.sleepHours !== null && todayBody?.sleepHours !== undefined && todayBody.sleepHours < 6.5) || (todayBody?.sleepQuality ?? 5) <= 2;
+  const stressHigh = (todayBody?.stress ?? 0) >= 4;
+  const alcoholYesterday = yesterdayBody?.alcohol === true;
+  const marijuanaYesterday = yesterdayBody?.marijuana === true;
+  const sickTodayOrYesterday = todayBody?.sick === true || yesterdayBody?.sick === true;
+  const foodConfidenceAdjusted = sleepLow || stressHigh || alcoholYesterday || marijuanaYesterday || sickTodayOrYesterday || workout.heavyTraining;
+
+  const firstMealTags = taggedTodayMeals[0]?.tags ?? [];
+  const earlyProtein = (todayTotals.breakfastProtein ?? todayTotals.firstMealProtein ?? 0) >= (todayTotals.breakfastLogged ? 20 : 25);
+  const underfed =
+    todayTotals.caloriesTotal !== null &&
+    (todayTotals.caloriesTotal < 1200 || (calorieBaseline !== null && todayTotals.caloriesTotal < calorieBaseline * 0.65));
+
+  let focus: FoodAlignmentRead;
+  if (!todayTotals.mealCount) {
+    focus = { status: "unknown", confidence: "low", reason: "No meals are logged for this date yet." };
+  } else if (!earlyProtein || firstMealTags.includes("crash-risk") || underfed) {
+    focus = {
+      status: "shaky",
+      confidence: confidenceWithContext("medium", foodConfidenceAdjusted),
+      reason: !earlyProtein ? "Early protein is light, so focus support is weaker." : "Food confidence is lower because the day has crash-risk or underfed signals.",
+    };
+  } else {
+    focus = {
+      status: "supported",
+      confidence: confidenceWithContext("medium", foodConfidenceAdjusted),
+      reason: "Protein appears early and no early crash-risk meal is logged.",
+    };
+  }
+
+  let energy: FoodAlignmentRead;
+  if (!todayTotals.mealCount) {
+    energy = { status: "unknown", confidence: "low", reason: "No meals are logged for this date yet." };
+  } else if (underfed) {
+    energy = {
+      status: "underfed",
+      confidence: confidenceWithContext("medium", foodConfidenceAdjusted),
+      reason: calorieBaseline === null
+        ? `Logged calories are light at ${formatGrams(todayTotals.caloriesTotal).replace("g", " kcal")}.`
+        : "Logged calories are well below the recent baseline.",
+    };
+  } else if (todayTotals.crashRiskCount > 0) {
+    energy = {
+      status: "crash-risk",
+      confidence: confidenceWithContext("medium", foodConfidenceAdjusted),
+      reason: "At least one meal has low protein/fiber with refined or sugary signals.",
+    };
+  } else {
+    energy = {
+      status: "stable",
+      confidence: confidenceWithContext("medium", foodConfidenceAdjusted),
+      reason: "Calories are not extremely low and steady protein/carb signals are present.",
+    };
+  }
+
+  let nutrients: FoodAlignmentRead;
+  if (!todayTotals.mealCount) {
+    nutrients = { status: "unknown", confidence: "low", reason: "No meals are logged for this date yet." };
+  } else if (todayTotals.proteinTotal === null) {
+    nutrients = { status: "unknown", confidence: "low", reason: "Protein estimates are missing from logged meals." };
+  } else if (todayTotals.proteinTotal < proteinTargetMin) {
+    nutrients = {
+      status: "missing_protein",
+      confidence: "medium",
+      reason: `Protein is ${formatGrams(todayTotals.proteinTotal)} against a current ${proteinTargetMin}g floor.`,
+    };
+  } else if ((todayTotals.fiberTotal ?? 0) < fiberTargetMin && todayTotals.plantTagCount < 2) {
+    nutrients = {
+      status: "missing_fiber_plants",
+      confidence: "medium",
+      reason: `Protein is covered, but fiber/plants are light (${formatGrams(todayTotals.fiberTotal)} fiber).`,
+    };
+  } else {
+    nutrients = {
+      status: "covered",
+      confidence: "medium",
+      reason: "Protein and fiber/plant anchors are both represented today.",
+    };
+  }
+
+  const weeklyByDate = new Map<string, TaggedMeal[]>();
+  for (const item of taggedWindowMeals) {
+    if (!weeklyByDate.has(item.meal.loggedDate)) weeklyByDate.set(item.meal.loggedDate, []);
+    weeklyByDate.get(item.meal.loggedDate)!.push(item);
+  }
+  const weekly = Array.from({ length: 7 }, (_, index) => {
+    const key = offsetDateKey(start7, index);
+    const dayMeals = weeklyByDate.get(key) ?? [];
+    const totals = buildDailyFoodTotals(dayMeals);
+    const body = bodyContextFor(key);
+    const dayWorkout = workoutContextFor(key);
+    return {
+      date: key,
+      mealCount: totals.mealCount,
+      proteinTotal: totals.proteinTotal,
+      fiberTotal: totals.fiberTotal,
+      plantTagCount: totals.plantTagCount,
+      crashRiskCount: totals.crashRiskCount,
+      context: {
+        sleepLow: (body?.sleepHours !== null && body?.sleepHours !== undefined && body.sleepHours < 6.5) || (body?.sleepQuality ?? 5) <= 2,
+        alcohol: body?.alcohol === true,
+        marijuana: body?.marijuana === true,
+        sick: body?.sick === true,
+        heavyTraining: dayWorkout.heavyTraining,
+      },
+    };
+  });
+
+  const weeklyLoggedDays = weekly.filter((day) => day.mealCount > 0).length;
+  const weeklyPlantTags = taggedWindowMeals.filter((item) => item.tags.includes("plant-heavy")).length;
+  const weeklyCrashRisk = taggedWindowMeals.filter((item) => item.tags.includes("crash-risk")).length;
+  const weeklyUltraProcessed = taggedWindowMeals.filter((item) => item.tags.includes("ultra-processed")).length;
+  const weeklyOmega3 = taggedWindowMeals.filter((item) => item.tags.includes("omega-3")).length;
+  const weeklyFermented = taggedWindowMeals.filter((item) => item.tags.includes("fermented")).length;
+
+  const longevity: FoodAlignmentRead = weeklyLoggedDays < 3
+    ? { status: "low-signal", confidence: "low", reason: "The 7-day window has fewer than three logged food days." }
+    : weeklyPlantTags >= 5 && weeklyCrashRisk <= 2 && weeklyUltraProcessed <= 2 && weeklyOmega3 + weeklyFermented >= 1
+      ? { status: "aligned", confidence: "medium", reason: "The week includes plant anchors and limited crash-risk/ultra-processed signals." }
+      : { status: "mixed", confidence: "low", reason: "Some weekly anchors are present, but variety or processing signals need more support." };
+
+  let nudge = "Keep the next meal steady: protein, plants, and a carb you digest well.";
+  if (!todayTotals.mealCount) {
+    nudge = "Log a meal and daily check-in to see food alignment.";
+  } else if (nutrients.status === "missing_protein") {
+    nudge = "Make the next meal protein-forward: eggs, Greek yogurt, tofu, fish, chicken, lentils, or beans.";
+  } else if (nutrients.status === "missing_fiber_plants") {
+    nudge = "Add a fiber/plant anchor next: beans, greens, berries, lentils, or a big vegetable side.";
+  } else if (energy.status === "underfed") {
+    nudge = "Bring energy back with a simple full meal: protein plus steady carbs and some fat.";
+  } else if (focus.status === "shaky") {
+    nudge = "For focus, make the next food move protein plus a steady carb instead of a snack-only meal.";
+  } else if (longevity.status === "mixed") {
+    nudge = "For the week, add one longevity anchor: fish, fermented food, legumes, whole grains, or extra vegetables.";
+  }
+
+  maybeRefreshAlignmentTracks({
+    date,
+    proteinBaseline,
+    fiberBaseline,
+    proteinTargetMin,
+    fiberTargetMin,
+    weeklyLoggedDays,
+    weeklyPlantTags,
+    weeklyCrashRisk,
+    weeklyUltraProcessed,
+    weeklyOmega3,
+    weeklyFermented,
+    contextAdjusted: foodConfidenceAdjusted,
+  });
+  const tracks = listAlignmentTracks();
+  const primaryNudge = pickPrimaryNudge(nudge, tracks);
+
+  return {
+    date,
+    generatedAt: nowIso(),
+    reads: {
+      focus,
+      energy,
+      nutrients,
+      longevity,
+    },
+    nudge: primaryNudge,
+    tracks: tracks.map((track) => ({
+      key: track.key,
+      label: track.label,
+      priority: track.priority,
+      status: track.status,
+      baselineValue: track.baseline_value,
+      currentTargetMin: track.current_target_min,
+      currentTargetMax: track.current_target_max,
+      confidence: track.confidence,
+      activeNudge: track.active_nudge,
+      lastPromotedAt: track.last_promoted_at,
+    })),
+    features: {
+      ...todayTotals,
+      proteinTargetMin,
+      fiberTargetMin,
+      calorieBaseline,
+      proteinBaseline,
+      fiberBaseline,
+      omega3Count7d: weeklyOmega3,
+      fermentedCount7d: weeklyFermented,
+      weeklyLoggedDays,
+    },
+    contextModifiers: {
+      alcoholYesterday,
+      marijuanaYesterday,
+      sickTodayOrYesterday,
+      sleepLow,
+      stressHigh,
+      heavyTraining: workout.heavyTraining,
+      foodConfidenceAdjusted,
+    },
+    weekly,
   };
 }
 
@@ -1020,7 +1736,7 @@ function buildHealthIntakePrompt(input: { text: string; source: string; timezone
     "",
     "Routes:",
     "- meal: food, drinks, snacks, appetite, digestion around eating.",
-    "- body: sleep, sleep quality, energy, mood, stress, soreness, hydration, gassiness, pain, symptoms without diagnosis.",
+    "- body: sleep, sleep quality, energy, mood, focus, anxiety, clarity, motivation, stress, soreness, hydration, gassiness, social context, activity level, sun exposure, sickness, alcohol, marijuana, pain, symptoms without diagnosis.",
     "- commitment: weekly consistency choices or promises.",
     "- mixed: more than one category appears.",
     "",
@@ -1035,7 +1751,9 @@ function buildHealthIntakePrompt(input: { text: string; source: string; timezone
     "- Example: input 'Qdoba chicken burrito for dinner' → meals[0]: { description: 'Qdoba chicken burrito', mealType: 'dinner', caloriesEstimate: 1100, proteinGEstimate: 55, carbsGEstimate: 120, fatGEstimate: 40, fiberGEstimate: 12 }.",
     "- Example: input 'dosa for breakfast' → meals[0]: { description: 'dosa', mealType: 'breakfast', caloriesEstimate: 250, proteinGEstimate: 5, carbsGEstimate: 40, fatGEstimate: 7, fiberGEstimate: 2 }.",
     "- If the user describes multiple meals/snacks in one message, return one meals[] entry per distinct meal so macros are itemized.",
-    "- Scores are 1-5 where 1 is low and 5 is high.",
+    "- Scores are 1-5 where 1 is low and 5 is high. Applies to sleepQuality, energy, moodScore, focus, anxiety, clarity, motivation, soreness, stress, gassiness.",
+    "- social must be one of: 'alone', 'light', 'heavy'. activityLevel must be one of: 'sedentary', 'mixed', 'active'. sunExposure must be one of: 'none', 'some', 'lots'.",
+    "- sick, alcohol, marijuana are booleans — true when the user clearly mentions it, false only when they explicitly deny it, otherwise omit.",
     "- Do not moralize food, diagnose, prescribe treatment, or use rigid diet language.",
     "- If a category is absent, return an empty array for it.",
     "- confirmation should be one short human-readable sentence.",
@@ -1092,6 +1810,16 @@ function normalizeHealthDrafts(parsed: Record<string, unknown>): ParsedHealthInt
           hydration: cleanScore(item.hydration),
           mood: cleanOptionalText(item.mood),
           moodScore: cleanScore(item.moodScore),
+          focus: cleanScore(item.focus),
+          anxiety: cleanScore(item.anxiety),
+          clarity: cleanScore(item.clarity),
+          motivation: cleanScore(item.motivation),
+          social: cleanEnum(item.social, SOCIAL_LEVELS),
+          activityLevel: cleanEnum(item.activityLevel, ACTIVITY_LEVELS),
+          sunExposure: cleanEnum(item.sunExposure, SUN_LEVELS),
+          sick: cleanBool(item.sick),
+          alcohol: cleanBool(item.alcohol),
+          marijuana: cleanBool(item.marijuana),
           notes: cleanOptionalText(item.notes),
           pain: cleanOptionalText(item.pain),
           sleepHours: cleanOptionalNumber(item.sleepHours),
@@ -1108,10 +1836,20 @@ function normalizeHealthDrafts(parsed: Record<string, unknown>): ParsedHealthInt
             item.sleepQuality !== null ||
             item.energy !== null ||
             item.moodScore !== null ||
+            item.focus !== null ||
+            item.anxiety !== null ||
+            item.clarity !== null ||
+            item.motivation !== null ||
             item.soreness !== null ||
             item.stress !== null ||
             item.hydration !== null ||
             item.gassiness !== null ||
+            item.social !== null ||
+            item.activityLevel !== null ||
+            item.sunExposure !== null ||
+            item.sick !== null ||
+            item.alcohol !== null ||
+            item.marijuana !== null ||
             item.mood ||
             item.pain ||
             item.symptoms ||
@@ -1210,6 +1948,16 @@ async function parseHealthWithGemini(input: { text: string; source: string; time
                   stress: { type: "INTEGER" },
                   hydration: { type: "INTEGER" },
                   gassiness: { type: "INTEGER" },
+                  focus: { type: "INTEGER" },
+                  anxiety: { type: "INTEGER" },
+                  clarity: { type: "INTEGER" },
+                  motivation: { type: "INTEGER" },
+                  social: { type: "STRING", enum: ["alone", "light", "heavy"] },
+                  activityLevel: { type: "STRING", enum: ["sedentary", "mixed", "active"] },
+                  sunExposure: { type: "STRING", enum: ["none", "some", "lots"] },
+                  sick: { type: "BOOLEAN" },
+                  alcohol: { type: "BOOLEAN" },
+                  marijuana: { type: "BOOLEAN" },
                   mood: { type: "STRING" },
                   pain: { type: "STRING" },
                   symptoms: { type: "STRING" },
@@ -1330,6 +2078,13 @@ export async function routeHealthApi(req: IncomingMessage, res: ServerResponse, 
   if (url.pathname === "/api/health/recent" && req.method === "GET") {
     const limit = Math.min(50, Math.max(1, Number(url.searchParams.get("limit") ?? 20)));
     sendJson(res, 200, { entries: listRecentHealthEntries(limit) });
+    return true;
+  }
+
+  if (url.pathname === "/api/health/food-alignment" && req.method === "GET") {
+    const dateParam = url.searchParams.get("date");
+    const date = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : dateKeyInTimezone(new Date(), timezone);
+    sendJson(res, 200, buildFoodAlignment({ date, timezone }));
     return true;
   }
 
@@ -1621,6 +2376,18 @@ export async function routeHealthApi(req: IncomingMessage, res: ServerResponse, 
     if (!text) { sendJson(res, 400, { error: "text cannot be empty" }); return true; }
     const loggedDate = typeof input.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(input.date) ? input.date : dateKeyInTimezone(new Date(), timezone);
     const capturedAt = normalizeCapturedAt(`${loggedDate}T12:00:00.000Z`);
+
+    const template = text.length <= 80 && !/[,;]| and /i.test(text) ? findMealTemplate(text) : null;
+    if (template) {
+      const draft = templateToMealDraft(template, text);
+      const entry = insertHealthMeal(draft, { capturedAt, loggedDate, source: "template", rawText: text });
+      if (entry) {
+        recordMealTemplateUse(template.id);
+        sendJson(res, 201, { entries: [entry], templateHit: true });
+        return true;
+      }
+    }
+
     const parsed = await parseHealthWithGemini({ text, source: "console", timezone });
     const entries: HealthEntry[] = [];
     for (const meal of parsed.meals) {

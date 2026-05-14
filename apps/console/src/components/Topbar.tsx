@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Activity,
+  Bookmark,
   BookOpenText,
   ChevronDown,
   CircleDollarSign,
@@ -39,6 +40,7 @@ const moduleIcons: Record<AppModuleId, typeof BookOpenText> = {
   home: Home,
   tasks: ListTodo,
   notes: BookOpenText,
+  "reading-list": Bookmark,
   terminal: Terminal,
   system: GalleryVerticalEnd,
   health: Activity,
@@ -68,9 +70,9 @@ const navDropdowns: NavDropdown[] = [
   {
     id: "knowledge",
     label: "Knowledge",
-    description: "Notes, shell, and system tools.",
+    description: "Notes, reading, shell, and system tools.",
     Icon: BookOpenText,
-    moduleIds: ["notes", "terminal", "system"],
+    moduleIds: ["notes", "reading-list", "terminal", "system"],
   },
   {
     id: "health",

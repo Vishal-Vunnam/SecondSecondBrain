@@ -13,6 +13,7 @@ export type AppModuleId =
   | "home"
   | "tasks"
   | "notes"
+  | "reading-list"
   | "terminal"
   | "system"
   | "health"
@@ -87,6 +88,22 @@ export type ShoppingItem = {
   necessity: ShoppingNecessity;
   gotIt: boolean;
   link: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ReadingStatus = "queued" | "reading" | "done";
+
+export type ReadingPriority = "next" | "soon" | "someday";
+
+export type ReadingItem = {
+  id: number;
+  title: string;
+  url: string | null;
+  note: string | null;
+  category: string | null;
+  priority: ReadingPriority;
+  status: ReadingStatus;
   createdAt: string;
   updatedAt: string;
 };
@@ -347,4 +364,89 @@ export type HealthCaptureResponse = {
   confirmation: string;
   route: HealthEntryType | "mixed";
   entries: HealthEntry[];
+};
+
+export type FoodAlignmentConfidence = "low" | "medium" | "high";
+
+export type FoodAlignmentRead = {
+  status: string;
+  confidence: FoodAlignmentConfidence;
+  reason: string;
+};
+
+export type FoodAlignmentDay = {
+  date: string;
+  mealCount: number;
+  proteinTotal: number | null;
+  fiberTotal: number | null;
+  plantTagCount: number;
+  crashRiskCount: number;
+  context: {
+    sleepLow: boolean;
+    alcohol: boolean;
+    marijuana: boolean;
+    sick: boolean;
+    heavyTraining: boolean;
+  };
+};
+
+export type FoodAlignmentTrack = {
+  key: string;
+  label: string;
+  priority: number;
+  status: string;
+  baselineValue: number | null;
+  currentTargetMin: number | null;
+  currentTargetMax: number | null;
+  confidence: FoodAlignmentConfidence;
+  activeNudge: string | null;
+  lastPromotedAt: string | null;
+};
+
+export type FoodAlignmentResponse = {
+  date: string;
+  generatedAt: string;
+  reads: {
+    focus: FoodAlignmentRead;
+    energy: FoodAlignmentRead;
+    nutrients: FoodAlignmentRead;
+    longevity: FoodAlignmentRead;
+  };
+  nudge: string;
+  tracks: FoodAlignmentTrack[];
+  features: {
+    mealCount: number;
+    caloriesTotal: number | null;
+    proteinTotal: number | null;
+    carbsTotal: number | null;
+    fatTotal: number | null;
+    fiberTotal: number | null;
+    firstMealAt: string | null;
+    firstMealType: string | null;
+    firstMealProtein: number | null;
+    breakfastLogged: boolean;
+    breakfastProtein: number | null;
+    plantTagCount: number;
+    stableCarbCount: number;
+    crashRiskCount: number;
+    ultraProcessedCount: number;
+    proteinTargetMin: number;
+    fiberTargetMin: number;
+    calorieBaseline: number | null;
+    proteinBaseline: number | null;
+    fiberBaseline: number | null;
+    omega3Count7d: number;
+    fermentedCount7d: number;
+    weeklyLoggedDays: number;
+  };
+  contextModifiers: {
+    alcoholYesterday: boolean;
+    marijuanaYesterday: boolean;
+    sickTodayOrYesterday: boolean;
+    sleepLow: boolean;
+    stressHigh: boolean;
+    heavyTraining: boolean;
+    foodConfidenceAdjusted: boolean;
+  };
+  weekly: FoodAlignmentDay[];
 };

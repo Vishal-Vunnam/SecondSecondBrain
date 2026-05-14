@@ -17,6 +17,7 @@ import { routeFeed, startFeedPoller } from "./domains/feed.js";
 import { routeFitness, topUpRecurrences } from "./domains/fitness.js";
 import { intakeHealth, routeHealthApi } from "./domains/health.js";
 import { routeHome } from "./domains/home.js";
+import { routeReadingList } from "./domains/reading-list.js";
 import { routeShopping } from "./domains/shopping.js";
 import { routeTasks, syncTaskIndex } from "./domains/tasks.js";
 import { routeVault } from "./domains/vault.js";
@@ -138,6 +139,10 @@ async function route(req: IncomingMessage, res: ServerResponse) {
   }
 
   if (url.pathname.startsWith("/api/feed") && (await routeFeed(req, res, url))) {
+    return;
+  }
+
+  if (url.pathname.startsWith("/api/reading-list") && (await routeReadingList(req, res, url))) {
     return;
   }
 

@@ -138,6 +138,21 @@ CREATE INDEX IF NOT EXISTS idx_health_meals_logged_date ON health_meals(logged_d
       updated_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS reading_list_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      url TEXT,
+      note TEXT,
+      category TEXT,
+      priority TEXT NOT NULL DEFAULT 'soon',
+      status TEXT NOT NULL DEFAULT 'queued',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_reading_list_status ON reading_list_items(status);
+    CREATE INDEX IF NOT EXISTS idx_reading_list_updated ON reading_list_items(updated_at);
+
     CREATE TABLE IF NOT EXISTS workout_recurrences (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
@@ -266,6 +281,58 @@ CREATE INDEX IF NOT EXISTS idx_health_meals_logged_date ON health_meals(logged_d
   ensureColumn("workouts", "performance", "INTEGER");
   ensureColumn("workouts", "focus", "INTEGER");
   ensureColumn("workouts", "notes", "TEXT");
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS food_meal_templates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      canonical_name TEXT NOT NULL,
+      normalized_key TEXT NOT NULL UNIQUE,
+      default_meal_type TEXT,
+      calories_estimate REAL,
+      protein_g_estimate REAL,
+      carbs_g_estimate REAL,
+      fat_g_estimate REAL,
+      fiber_g_estimate REAL,
+      tags TEXT NOT NULL DEFAULT '[]',
+      use_count INTEGER NOT NULL DEFAULT 0,
+      last_used_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_food_meal_templates_key ON food_meal_templates(normalized_key);
+
+    CREATE TABLE IF NOT EXISTS food_alignment_tracks (
+      key TEXT PRIMARY KEY,
+      label TEXT NOT NULL,
+      priority INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active',
+      baseline_value REAL,
+      current_target_min REAL,
+      current_target_max REAL,
+      confidence TEXT NOT NULL DEFAULT 'low',
+      active_nudge TEXT,
+      last_promoted_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+  `);
+
+  const trackSeed = [
+    { key: "focus", label: "Focus", priority: 1 },
+    { key: "energy", label: "Energy", priority: 2 },
+    { key: "nutrients", label: "Nutrients", priority: 3 },
+    { key: "longevity", label: "Longevity", priority: 4 },
+    { key: "digestion", label: "Digestion", priority: 5 },
+  ];
+  const seedTimestamp = new Date().toISOString();
+  const seedStmt = db.prepare(
+    `INSERT OR IGNORE INTO food_alignment_tracks (key, label, priority, status, confidence, created_at, updated_at)
+     VALUES (?, ?, ?, 'active', 'low', ?, ?)`,
+  );
+  for (const track of trackSeed) {
+    seedStmt.run(track.key, track.label, track.priority, seedTimestamp, seedTimestamp);
+  }
 
   const healthWorkoutsExists = db
     .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='health_workouts'`)

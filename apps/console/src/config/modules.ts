@@ -18,6 +18,14 @@ export const appModules: AppModule[] = [
     status: "active",
   },
   {
+    id: "reading-list",
+    title: "Reading List",
+    shortTitle: "Reading",
+    description: "Personal queue for books, essays, papers, and saved links.",
+    group: "knowledge",
+    status: "active",
+  },
+  {
     id: "tasks",
     title: "Tasks",
     shortTitle: "Tasks",
@@ -63,7 +71,7 @@ export const appModules: AppModule[] = [
     shortTitle: "Food",
     description: "Meal patterns and loose food logs.",
     group: "health",
-    status: "planned",
+    status: "active",
   },
   {
     id: "fitness",

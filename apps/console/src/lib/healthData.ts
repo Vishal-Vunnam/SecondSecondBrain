@@ -1,4 +1,13 @@
-import type { HealthBodyEntry, HealthCaptureResponse, HealthCommitmentEntry, HealthEntry, HealthEntryType, HealthMealEntry, HealthOverview } from "../types";
+import type {
+  FoodAlignmentResponse,
+  HealthBodyEntry,
+  HealthCaptureResponse,
+  HealthCommitmentEntry,
+  HealthEntry,
+  HealthEntryType,
+  HealthMealEntry,
+  HealthOverview,
+} from "../types";
 import { apiUrl } from "./api";
 
 async function parseJson<T>(response: Response): Promise<T> {
@@ -122,6 +131,16 @@ export async function loadHealthRhythm(days = 60) {
     credentials: "include",
   });
   return parseJson<{ bullets: string[]; generatedAt: string; days: number }>(response);
+}
+
+export async function loadFoodAlignment(date?: string) {
+  const params = new URLSearchParams({ timezone: timezone() });
+  if (date) params.set("date", date);
+  const response = await fetch(apiUrl(`/api/health/food-alignment?${params.toString()}`), {
+    cache: "no-store",
+    credentials: "include",
+  });
+  return parseJson<FoodAlignmentResponse>(response);
 }
 
 export type HealthCheckinPayload = Partial<{
